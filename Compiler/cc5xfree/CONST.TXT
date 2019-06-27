@@ -1,0 +1,291 @@
+
+CONTENTS
+--------
+* Const data support
+* Pointer Models
+* Storing 14 bit data
+* Const data and Interrupt
+* Data of size 16 bit or more
+* Code Pages
+* Merging data
+* Examples
+
+
+
+CONST DATA SUPPORT
+------------------
+
+CC5X supports constant data stored in program memory. The C keyword
+'const' tells the compiler that these data do not change.
+
+Examples:
+    const char *ps = "Hello world!";
+    const float ftx[] = { 1.0, 33.34, 1.3e-10 };
+    ..
+    t = *ps;
+    ps = "";
+    fx = ftx[i];
+
+The implementation of constant data supports the following features:
+
+    * both 8 and 16 bit pointers in the same application
+
+    * the size of single pointers is normally automatically chosen
+
+    * 'const' pointers can access both RAM and program memory
+
+    * the compiler will not put all constant data in a single table,
+      but rather make smaller tables if this saves code space
+
+    * some devices supports 14 bits data (PIC16F87X). The compiler
+      will automatically chose this format if space can be saved.
+      This allows very compact storage of 7 bit ASCII strings.
+
+    * duplicate strings and other data are automatically merged to
+      save space
+
+Command line options:
+
+    -mc1 : default 'const' pointer size is 1 byte (8 bits)
+    -mc2 : default 'const' pointer size is 2 bytes (16 bits)
+    -mr1 : default RAM pointer size is 1 byte
+    -mr2 : default RAM pointer size is 2 bytes
+    -mm1 : default pointer size is 1 byte (all pointer types)
+    -mm2 : default pointer size is 2 bytes (all pointer types)
+
+That default pointer sizes are used only when the pointer size is
+not chosen dynamically. The priority when deciding the pointer size
+is:
+
+    1) Pointer size type modifiers
+    2) Automatic chosen pointer size (single pointers)
+    3) Pointer size chosen according to the default model
+
+Pointer size type modifiers:
+
+    'size1': pointer size is 1 byte (8 bits)
+    'size2': pointer size is 2 byte (16 bits)
+
+The size type modifer must be put in front of the data type:
+
+    bank1 size2 float *pf;
+
+
+Recommendations:
+
+   It is recommended to use small data tables and structures. This
+   allows the compiler to merge equal data items and build optimal
+   blocks of constant data.
+
+
+Limitations:
+   1) The compiler will not initialize RAM variables on startup
+   2) Data items of 16 bit or more in structures with more than 256
+      byte data must be aligned
+
+
+
+POINTER MODELS
+--------------
+
+Using 8 bit pointers when possible saves both code and RAM space.
+CC5X allows the size of all single pointers to be decided
+automatically. However, pointers in structures and arrays have to be
+decided in advance, by using the memory model command line options
+or a size type modifier.
+
+Note that the operator sizeof(pointer) will fix the size according
+to the chosen default model. Using sizeof(pointer) is normally not
+required and should be avoided.
+
+Several different pointer types are supported. This is done
+automatically and is transparent to the application program.
+
+    a) 8 bit pointer to RAM. The compiler will automatically
+       update the IRP bit if required (when RAM space exceeds 256
+       bytes).
+
+    b) 16 bit pointer to RAM. This format is required only
+       when the same pointer have to access locations in different
+       256 byte RAM segments.
+
+    c) 8 bit pointer to program memory. This pointer can access
+       up to 256 byte data.
+
+    d) 16 bit pointer to program memory. This pointer can access
+       more than 256 byte data.
+
+    e) 8 bit pointer to RAM or program memory. This pointer can
+       access up to 128 byte data and 128 byte RAM. Bit 7 is used to
+       detect RAM or program memory access. The compiler will only
+       chose this format if all RAM addresses loaded to the pointer
+       is in the same bank (14 bit core).
+
+    f) 16 bit pointer to RAM or program memory. Bit 15 is used to
+       detect RAM or program memory access.
+
+
+
+STORING 14 BIT DATA
+-------------------
+
+Some devices supports 14 bits data stored in program memory. This
+allows compact storage of 7 bit ASCII strings and 14 bits data. The
+code sequence required for accessing these bits is longer than the
+code for a return table. This means that code is saved when the
+amount of data exceeds 40-50 bytes. The compiler will automatically
+chose the optimal storage format.
+
+The 14 bit data format allows storing up to 16000 bytes of
+7 bit ASCII text on a 8k device.
+
+The compiler will use the 14 bit format when a pragma statement
+is used. This is normally found in the header file for the device.
+The device must also contain certain special purpose registers:
+
+  1)
+    #pragma wideConstData
+    /*char*/ EEADRH, EEADR, EEDATH, EEDATA, /*bit*/ EEPGD, RD
+  2)
+    #pragma wideConstData r
+    /*char*/ PMADRH, PMADR, PMDATH, PMDATA, /*bit*/ RD
+  3)
+    #pragma wideConstData p
+    /*char*/ PMADRH, PMADRL, PMDATH, PMDATL, /*bit*/ RD
+
+When a constant table contains less than 256 byte of data, there
+will be a tradeoff between speed and size. Using a return table
+executes faster but requires more code when the table contains more
+than 40-50 bytes of data. If speed is required, the following
+pragma statement defines a new limit for size optimization.
+
+    #pragma wideConstData 200  // return table up to 200 byte data
+
+
+
+CONST DATA AND INTERRUPT
+------------------------
+
+Const data can be accessed during interrupt. However, there are
+a couple of issues to be aware of:
+
+1. PCLATH need to be saved because data is accessed by a computed
+   goto. This is done automatically when using the standard
+   interrupt save and restore macro's found in file int16cxx.h.
+   However, for devices with 2k words of code or less, PCLATH is not
+   saved automatically. This must then be done manually, similar to
+   the sequence used for saving FSR. CC5X will normally print an
+   error when the saving is not done (see file int16cxx.h).
+
+2. Reading const data by accessing 14 bit program data is NOT
+   allowed. CC5X will print an error if such access is detected,
+   saying: "Unsupported const/interrupt mode (see const.txt)".
+
+   The only way to escape from this is to force the compiler to use
+   computed goto to access const data. This is done by using:
+
+     #pragma wideConstData 300
+
+   Note that size (300) have to be larger than the amount of bytes
+   accessed by the const access function that is called
+   automatically from the interrupt routine.
+
+
+
+DATA OF SIZE 16 BIT OR MORE
+---------------------------
+
+The compiler allows access of 8,16,24 and 32 bits data, including
+fixed and floating point formats. When using arrays or structures
+with more than 256 byte data, single data items have to be aligned.
+Alignment means that there should not be any remainder when dividing
+the offset with the size of the data item. This is only a problem
+when defining structures containing data of different sizes.
+
+  const long tl[5] = { 10000, -10000, 0, 30000, -1 };
+  const uns24 th[] = { 1000000, 0xFFFFFF, 9000000 };
+  const int32 ti[] = { 1000000000, 0x7FFFFFFF, -900000000 };
+  const fixed8_8 tf[] = { -1.1, 200.25, -100.25 };
+  const float tp[] = { -1.1, 200.25, 23e20 };
+  const double td[] = { -1.1, 200.25, 23e-30};
+  const float16 ts[] = { -1.1, 200.25, 23e-30};
+  ..
+  l = tl[i];  // reading a long integer
+  d = td[x];  // reading a double float constant
+
+
+
+CODE PAGES
+----------
+
+When using devices with more than one codepage, the compiler will
+automatically calculate the optimal codepage for the data. The
+disadvantage is that the compiler will not know when a codepage is
+full, so the functions still have to be moved manually between
+codepages to find allowed and optimal combinations. Also, the
+data can be located on a specific codepage by using a page type
+modifier.
+
+    const page1 char tx[] = "Hello!";
+
+
+
+MERGING DATA
+------------
+
+The compiler will automatically merge equal strings and sub-strings,
+and also other data items. Using small tables will increase the
+chance of finding data items that can be merged.
+
+Note that data containing initialized addresses are not merged.
+
+Examples:
+
+1. The string "world!" is identical to the last part of the
+   string "Hello world!". It is therefore not required to use
+   additional storage for the first string. The compiler handles
+   the address calculations so that merged (or overlapping)
+   strings are handled fully automatically. Note that the string
+   termination '\0' also have to be equal, otherwise merging is
+   not possible. For example, the string "world" can not be
+   merged with the above strings.
+
+2. Merging applies to all kinds of data. Data is compared byte by
+   byte. This allows the first two of the following tables to be
+   merged with the last one.
+
+   const char a1[] = { 10, 20, 30 };
+   const char a2[] = "ab";
+   const char a3[] = { 5, 10, 20, 30, 'a', 'b', 0 };
+
+
+
+EXAMPLES
+--------
+
+A table of pointer to strings:
+
+    const struct {
+        const char *s;
+    } tb[] = {
+        "Hello world",
+        "Monday",
+        "",
+        "world"  // automatically merged with first string
+    };
+
+Note that 'const struct' is required to put the pointers in program
+memory. Using 'const char *tx[];' means that the data resides in
+program memory, but the table itself 'tx[]' resides in RAM.
+
+    p = tb[i].s;  // const char *p; char i;
+
+    t = *p++;     // char t;
+    t = p[x];     // char x;
+
+String parameters:
+
+    myfunc("Hello");  // void myfunc(const char *str);
+    myfunc(&tab[i]);  // char tab[20]; // string in RAM
+    myfunc(ctab);  // const char ctab[] = "A string";
+

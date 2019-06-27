@@ -1,0 +1,25 @@
+CC5X Version 3.2K, Copyright (c) B Knudsen Data, Norway 1992-2006
+ --> FREE edition, 8-16 bit int, 24 bit float, 1k code, reduced optim.
+lab4_hall_effect_sensor.c:
+ 27. Jun 2019  15:34
+ Chip = 16F873A
+Warning lab4_hall_effect_sensor.c 61: Local variables and parameters in uncalled functions are not allocated (4)
+ (The application contains non-library functions that are not called. Local
+ variables in these functions (option -wU) are not allocated to save space)
+ RAM: 00h : -------- -------- -------- --------
+ RAM: 20h : -======= ==...... ........ .*******
+ RAM: 40h : ******** ******** ******** ********
+ RAM: 60h : ******** ******** ******** ********
+ RAM: 80h : -------- -------- -------- --------
+ RAM: A0h : -******* ******** ******** ********
+ RAM: C0h : ******** ******** ******** ********
+ RAM: E0h : ******** ******** ******** ********
+RAM usage: 26 bytes (9 local), 166 bytes free
+ Optimizing - removed 12 instructions (-3 %)
+ File 'lab4_hall_effect_sensor.occ'
+ Codepage 0 has  290 word(s) :  14 %
+ Codepage 1 has    0 word(s) :   0 %
+ File 'lab4_hall_effect_sensor.hex'
+Total of 290 code words (7 %)
+ * Estimated CODE SIZE of full optimization: 231 code words (-20 %)
+ RESTRICTIONS on commercial usage applies as described in file readme.txt

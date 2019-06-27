@@ -1,0 +1,306 @@
+
+SELECTING A PICmicro DEVICE
+---------------------------
+
+CC5X offers 3 ways to select the PICmicro device when compiling an
+application. MPLAB will define the device automatically.
+
+ 1) By a command line option. MPLAB will generate this option
+    automatically.
+
+     -p16F877
+
+ 2) By a pragma statement in the source code. This is normally the
+    recommended method. Note that the command line option will
+    override the selection done by #pragma chip.
+
+     #pragma chip PIC16F84
+
+ 3) By using include to directly select a header file. This is
+    not recommended because there will be an error if the command
+    line option is also used.
+
+     #include "16c73.h"
+
+
+NOTE 1: When using a pragma statement or include file, remember to
+use this the beginning of the C program so that it is compiled
+first. However, some preprocessor statements like '#define' and
+'#if', etc. may preceed the #include/#pragma statement.
+
+NOTE 2: When using the command line option or the pragma statement,
+CC5X will use the internal definitions for some devices. If the
+device is not known, automatic include of a header file is started.
+The internal known devices are:
+ 16C54,55,56,57,58, 61,64,65, 71,73,74, 84, 620,621,622
+
+NOTE 3: If the header file does not reside in the default project
+folder, then the path name is required. This can be supplied by a
+command line option as an include folder/directory (-I<path>).
+
+NOTE 4: New header files can be defined according to the next
+section "GENERIC CHIP SUPPORT" and section "HOW TO MAKE A NEW
+HEADER FILE".
+
+NOTE 5: ICD and ICD2 debugging requires defining a symbol before the
+header file is compiled to avoid duplicate use of reserved
+resources:
+
+  a) By a command line option:
+    -DICD_DEBUG   or   -DICD2_DEBUG
+
+  b) By using #define in combination with #pragma chip or #include:
+
+    #define ICD_DEBUG   // or ICD2_DEBUG
+    ..
+    #pragma chip PIC16F877  // or #include "16F877.H"
+
+
+
+
+HOW TO MAKE A NEW HEADER FILE
+-----------------------------
+
+  1. Chose an existing definition which is similar to the new chip
+  2. Copy this definition to a new file, ex. '16C123.h'
+  3. Modify and extend the definition according to the next section
+  4. Use the new header file the same way as existing header files
+
+  NOTE: Before making a new header file, check if a header file
+  can be downloaded from www.bknd.com
+
+
+
+GENERIC CHIP SUPPORT
+--------------------
+
+This section defines how to make NEW header files.
+
+The generic chip definition syntax is:
+
+ #pragma chip [=] CHIP_ID, core CSIZE, code PSIZE, ram RMIN : RMAX [MAPPING]
+
+    CHIP_ID :  PIC16CNN, PIC16cNN, _16CNN, _16cNN, p16CNN, p16cNN,
+               or any name starting with a letter or '_'.
+
+    CSIZE : core size of the chip: 12, 14
+
+    PSIZE : program memory size
+            core 12 : up to 2048 words
+            core 14 : up to 8192 words
+
+    RMIN : minimum valid general purpose RAM address
+            core 12 : 7, 8, ..
+            core 14 : 12, 32, ..
+
+            NOTE that (most) addresses below RMIN are assumed to be
+            volatile, which means different code and optimization.
+
+    RMAX : maximum valid RAM address : 31 .. 511
+
+    MAPPING : 'mapped_into_bank_1' or 'mapped_into_all_banks'.
+              Should be used if the same RAM locations can be
+              accessed independent of the contents of the bank
+              selection registers (i.e. from all banks). This
+              applies for example to 16C71, but not to 16C620.
+              Note that 'mapped_into_bank_1' can not be used
+              if the chip offers more than 2 RAM banks.
+
+              /0: IRP and RP1 are inactive for RAM access
+              /1: IRP and RP1 are active for RAM access
+
+              /2: IRP and RP1 are inactive for SFR access
+              /3: IRP and RP1 are active for SFR access
+
+              Inactive bank selection bits are not updated. The
+              compiler use RMAX and the highest SFR (special
+              function register) address defined to decide RP1/IRP
+              updating. It is therefore normally not required to
+              use /1 .. /4. There are some exceptions:
+
+                  #pragma chip PIC16C923, .. , ram 32 : 0xFF /1 /3
+                  #pragma chip PIC16F873, .. , ram 32 : 0xFF /0 /3
+
+    NOTE: CHIP_ID is used for defining the processor type in the
+    '.asm' file and to automatic define a symbol during compilation:
+
+    The mapping is:      #pragma chip      ASM file    Defined symbol
+                         _16cXX            16CXX       _16CXX
+                         _16CXX            16CXX       _16CXX
+                         p16cXX            16CXX       _16CXX
+                         p16CXX            16CXX       _16CXX
+                         PIC16cXX          16CXX       _16CXX
+                         PIC16CXX          16CXX       _16CXX
+
+                         _PIC16cXX         PIC16cXX    _PIC16cXX
+                         __16cXX           _16cXX      __16cXX
+                         MTA85401          MTA85401    _MTA85401
+
+
+    NOTE: Symbol '_16C5X' is always defined for all 12 bit core chips.
+
+
+Some chips requires additional statements:
+
+      #pragma ramdef RA : RB [SPECIAL_MAPPING]
+
+    RA : RB defines additional RAM space, RA is the first RAM
+    location and RB is the last RAM location. By default, address 0
+    to RMIN in each RAM bank is assumed to be special purpose
+    registers. Some banks may contain general purpose RAM in this
+    area. The '#pragma ramdef' statement will allow these RAM
+    locations to be allocated and optimized the normal way.
+
+    SPECIAL_MAPPING ('mapped_into_all_banks') is used when some
+    RAM locations are mapped into all RAM banks.
+
+    The definition for the PIC16C77 (and 66/67/76) then become:
+
+       #pragma chip _16C77, core 14, code 8192, ram 32 : 0x1FF
+       #pragma ramdef 0x110 : 0x11F
+       #pragma ramdef 0x190 : 0x19F
+       #pragma ramdef  0x70 : 0x7F mapped_into_all_banks
+
+
+RAM regions can be disabled for normal allocation:
+
+     #pragma ramdef 0x40 : 0x47 remove
+
+     This can be used for defining buffer space, etc.
+     Warning: Note that the 'remove' statement does NOT change the
+     boundary between RAM and special purpose registers.
+
+
+Some chips also have an unusual startup vector location (like the
+PIC16C508/9). The reset-vector then have to be specified.
+
+    NOTE: this statement is normally NOT required, because the
+    compiler normally use the default location, which is the first
+    (14 bit core) or the last location (12 bit core).
+
+      #pragma resetVector 0x1FF // at last code location
+      #pragma resetVector 0     // at location 0
+      #pragma resetVector 10    // at location 10 (leave 0 - 9 unused)
+      #pragma resetVector -     // NO reset-vector at all
+
+
+The number of call levels can be defined (normally not required):
+
+      12 bit core : default 2 levels
+      14 bit core : default 8 levels
+
+      #pragma stackLevels 4   // max 64
+
+
+
+REGISTER DEFINITIONS
+--------------------
+
+NOTE: Some registers are ALWAYS automatically defined,
+and SHOULD NOT be defined again:
+
+Core 12 (16C5X):
+  char W;
+  char INDF, TMR0, PCL, STATUS, FSR, PORTA, PORTB;
+  char INDF0, RTCC, PC; // alternative names
+  char OPTION, TRISA, TRISB;
+  char PORTC, TRISC;
+  bit Carry, DC, Zero_, PD, TO, PA0, PA1, PA2;
+  bit FSR_5, FSR_6;
+
+  NOTE: PORTC and TRISC are NOT defined if RMIN is set to 7
+
+Core 14:
+  char W;
+  char INDF, TMR0, PCL, STATUS, FSR, PORTA, PORTB;
+  char INDF0, RTCC, PC, OPTION; // alternative names
+  char OPTION_REG, TRISA, TRISB;
+  char PCLATH, INTCON;
+  bit PS0, PS1, PS2, PSA, T0SE, T0CS, INTEDG, RBPU_;
+  bit RTE, RTS; // alternative names
+  bit Carry, DC, Zero_, PD, TO, RP0, RP1, IRP;
+  bit RBIF, INTF, T0IF, RBIE, INTE, T0IE, GIE;
+  bit RTIF, RTIE; // alternative names
+  bit PA0, PA1;  // PCLATH
+
+
+
+DEFINING CONFIG FEATURES
+------------------------
+
+The position and size of the supported config identifiers should be
+defined. This enables the identifiers to be used in #pragma config
+statements in an application.
+
+    #pragma config_def [=] value
+
+   BIT:
+    0:  FOSC in bit 0,1   : 0 - 3, LP, XT, HS, RC
+    1:  FOSC in bit 0,1,2 : 0 - 7, LP, XT, HS
+    2:  FOSC in bit 0     : 0, 1
+    3:  FOSC in bit 0,1,4 : 0 - 7, LP, XT, HS
+
+    4:  WDTE in bit 2: off (0), on (1)
+    5:  WDTE in bit 3: off (0), on (1)
+
+    8:  PWRTE in bit 3 (inverted):     on (0), off (1)
+    9:  PWRTE in bit 4 (inverted):     on (0), off (1)
+    10: PWRTE in bit 3 (not inverted): off (0), on (1)
+
+    12: BODEN in bit 6  : off (0), on (1)
+
+
+Example: #pragma config_def 0x1111  // definition in header file
+
+    FOSC in position 0,1
+    WDTE in position 2
+    PWRTE in position 3 (0=on)
+    BODEN in position 6
+
+
+
+SECOND CONFIG REGISTER
+----------------------
+
+The address of the second config register is normally defined in the
+header file using:
+
+    #pragma config_reg2 0x2008
+
+
+
+INTERRUPT REGISTER SAVE STYLE
+-----------------------------
+
+#define INT_min_style   // 16C61,71,84,710,711,F83,F84
+ // CODE : Up to 2048 words (PCLATH not saved)
+ // RAM :  Located in bank 0 and mapped to bank 1, RP1 is unused
+
+#define INT_med_style   // 16C64,62,72,662,558,715
+ // CODE : Up to 2048 words (PCLATH not saved)
+ // RAM :  Located in bank 0 and 1 (no mapping), RP1 is unused
+
+#define INT_bank0_style // 16C620,621,554,556
+ // CODE : Up to 2048 words (PCLATH not saved)
+ // RAM :  Located in bank 0 only (no mapping either), RP1 is unused
+
+#define INT_com_style // 12C671,672,661,641
+ // CODE : Up to 2048 words (PCLATH not saved)
+ // RAM :  Located in 2 banks, some locations are mapped, RP1 is unused
+
+#define INT_lgen_style  // 16F627,628
+ // CODE : Up to 2048 words (PCLATH not saved)
+ // RAM :  Both RP0 and RP1 are active, some RAM locations are mapped
+
+#define INT_max_style   // 16C65,73,74,63,14000
+ // CODE : More than 2048 words (PCLATH is saved)
+ // RAM :  Located in bank 0 and 1 (no RAM mapping between bank 0 and 1)
+ // If RP1 is used: RAM in bank 2 is mapped to bank 0, and bank 3 to bank 1
+
+#define INT_midgen_style // 16C642,662
+ // CODE : More than 2048 words (PCLATH is saved)
+ // RAM :  Located in 2 banks, some locations are mapped, RP1 is unused
+
+#define INT_gen_style  // 16C66,67,76,77,923,924
+ // CODE : More than 2048 words (PCLATH is saved)
+ // RAM :  Both RP0 and RP1 are active, some RAM locations are mapped

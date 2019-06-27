@@ -1,0 +1,452 @@
+
+INSTALLATION OF CC5X
+
+
+SYSTEM REQUIREMENTS
+-------------------
+
+The CC5X compiler is available as a 16 or 32 bit application (MSDOS
+command line or WIN32 console application) and runs on IBM-PC
+compatible machines using MSDOS or Windows (95/98/me/NT/2000/XP).
+
+The installation program runs under Windows. Around 3-5 MB of free
+disk space is needed to complete installation.
+
+
+
+INSTALLATION
+------------
+
+A Windows installation program is available. The installation is
+completed by a few simple steps.
+
+A license file is needed to install a licensed compiler edition.
+This file should preferably be stored at the same folder as the
+installation program. Otherwise the license file has to be located
+during the installation process.
+
+CC5X is ready to compile C files after installation. Header and C
+source files have to be created and edited by separate tools (not
+included), for instance in the MPLAB suite.
+
+The CC5X files can be deleted without any uninstallation procedure.
+
+
+
+ZIP FILE
+--------
+
+The compiler is alternatively supplied as a ZIP file if the Windows
+installation program can not be used for some reason. A tool like
+PKUNZIP or WINZIP is required to extract the files into the desired
+compiler folder.
+
+First create a directory/folder on the hard disk where the compiler
+files should be located. Most application programs are found in the
+"Program Files" folder on the C: drive.
+
+
+
+SUPPORT FOR LONG FILE NAMES
+---------------------------
+
+CC5X (WIN32 editions) supports long file names. It is also possible
+to use spaces in file names and include directory names.
+
+Equivalent include directory option formats:
+
+   -I"C:\Program Files\cc5x"
+   -IC:\progra~1\cc5x
+
+Equivalent include file formats:
+
+   #include "C:\Program Files\cc5x\C file"
+   #include "C:\progra~1\cc5x\Cfile~1"
+
+The alternative to long names is the truncated short format. The
+truncated form is decided by the file system. The best guess
+consists of the 6 first characters of the long name plus ~1. The
+last number may be different (~2) if the first 6 characters are
+equal to another name in the same directory.
+
+MPLAB version 5 uses and displays the short format only.
+
+
+
+
+USER INTERFACE
+--------------
+
+The CC5X compiler is a command-line program (or a console program in
+the Windows environment). It requires a list of command line options
+to compile a C source file and produce the required files.
+
+Starting CC5X from Windows can be done from the Start->Run menu.
+Then type the full path name including cc5x.exe (or use Browse). The
+list of compiler command line options are then written to the
+screen. The normal way of using CC5X is to use it as a tool from an
+integrate environment like MPLAB.
+
+In a MSDOS window, the compiler is invoked by writing (note that
+the full path may have to be written):
+
+  cc5x
+
+This produces an list of the valid arguments to the compiler.
+
+Compiling a program is done by:
+
+  cc5x sample1.c
+
+Generating an assembly file:
+
+  cc5x -a sample1.c
+
+
+
+MPLAB VERSION 6.30 AND LATER (VERSION 7)
+----------------------------------------
+
+Note: MPLAB version 5 support is described in the next section.
+
+MPLAB version 6.30 and later supports the MTC integration method
+similar to MPLAB 5. Project setup is easy, especially the single
+module mode. The output from the compiler is shown in the MPLAB
+'Output' window. POINT-AND-CLICK on error messages is supported.
+
+SINGLE MODULE MODE: The compiler will generate all required files
+for programming and debugging. Both assembly and C level debugging
+is available. 
+
+MULTIPLE MODULE MODE: The compiler will generate relocatable
+assembly, then start MPASM or MPASMWIN and finally use MPLINK to
+generate the HEX and debugging files used by MPLAB. This means that
+the debugging have to be done in assembly mode. The main advantage
+of using multiple modules is integration with assembly modules.
+
+
+Preparing for a new project:
+
+First install and start MPLAB 6.30 or later. Note that earlier
+version of MPLAB 6 does not have the required MTC support.
+
+Create a new project by clicking on the "New Project" icon, or
+selecting the menu item "Project->New". Write the name of the
+project. Then decide the Directory where to store the project files,
+or use the "Browse..." button to select a directory. Click on "OK".
+MPLAB will create two files <project>.mcp and <project>.mcw in this
+directory, and display a window containing the project name on top.
+
+Define the device by selecting the menu item "Configure->Select
+Device". Select for example PIC16F877.
+
+Define the configuration bits by selecting the menu item "Configure->
+Configuration Bits". This is interesting only if you are programming
+a real device. Select the right oscillator, watchdog mode and so on.
+
+For high level debugging you select menu item "Debugger->Select
+Tool" and then for example MPLAB ICD 2 or MPLAB SIM. If you are not
+debugging, but want to program devices then select "Programmer->
+Select Programmer" and then MPLAB ICD 2 or another tool.
+
+Select menu item "Project->Select Language Toolsuite" (or right-
+click on the project name and then click on "Select Language
+Toolsuite"). Then click on the button at the right of the Active
+Toolsuite. Select "B Knudsen Data CC5X". Then select in "Toolsuite
+Contents" the "CC5X C Compiler" item. Select the Browse button down
+to the right. You now have to find and select the compiler
+executable. After selecting this file and clicking Open, the full
+path and name will appear in the "Location" field. This field can
+also be edited manually. Click OK.
+
+Select menu item "Project->Build Options->Project" or right-click on
+the project name and then "Build Options...". Enter a path for
+"Include Path, $(INCDIR)", for example by using the Browse button
+to the right. This path should normally point to the compiler
+directory which contains header and math include files. Note that
+directory names containing spaces have to be written according to
+the rules described earlier (in section SUPPORT FOR LONG FILE
+NAMES). It may be required to enter doublequotes " " manually if the
+path contains spaces. Note that the string should NOT end with
+backslash+doublequote \" because then the options will not be
+forwarded correctly to the compiler. The other options forwarded to
+the compiler can be changed on the "CC5X C Compiler" card item.
+Click OK.
+
+NOTE: ICD 2 debugging need resource reservation to avoid problems.
+Upper addresses of RAM and CODE space is used by the ICD 2 module,
+and 1 stack level. The definition of these reservations are normally
+found in the header files (i.e. 16F877.h), but may not be present in
+all header files. Note that ICD 2 reservations are different from
+ICD reservations. Please check and update the header file, or get an
+updated header file. When the header is correct, add option
+-DICD2_DEBUG to the compiler build options (Field "Additional
+Command-Line Options").
+
+
+Working with a single module:
+
+After creating the project (as described earlier), MPLAB displayed a
+window at the left side where project files can be inserted. It is
+required to create the files before they are added to the project.
+By clicking on the right mouse button on the "Source Files" item, it
+is possible to add source files. You can also do this by selecting
+the menu item "Project->Add files to Project". Select a single main
+C file.
+
+The Build all (ctrl-F10) will build the project. The Output window
+will state BUILD SUCCEEDED or BUILD FAILED. If build failed it will
+be required to correct the wrong input. It is possible to use POINT-
+AND-CLICK on the error messages.
+
+On successful build it will be possible to run and debug the code in
+ICD 2 or the MPLAB simulator, and to program the device for normal
+target execution.
+
+NOTE: When displaying variables in the Watch window (View->Watch),
+variables are by default displayed as 8 bit HEX values. When the
+variables to be displayed have been added to the Watch window,
+select "Properties ..." by right-clicking in the Watch window (chose
+the last menu item). Then change "Watch Properties" according to
+your preferences for each variable selected. For bit variables you
+first change the "Format" to "Single Bit", then select the right bit
+number (0..7).
+
+NOTE: When displaying the simulator trace (View->Simulator Trace),
+there will be no source code information. A disassembly listing is
+displayed, containing labels as only high level information. If the
+trace is important, try the compiler option -CA to enable assembly
+mode debugging.
+
+
+Using MPLINK and multiple modules:
+
+After creating the project (as described earlier), MPLAB will
+display a window at the left side where project files can be
+inserted. It is required to create the files before they are added
+to the project. By clicking on the right mouse button on the "Source
+Files" item, it is possible to add source files. You can also do
+this by selecting the menu item "Project->Add files to Project". It
+is enough to add the source module files (.c and .asm) and the
+linker script file (.lkr).
+
+Note that the file 'reloc.inc' need to be found in the current
+project directory. You can either copy the supplied reloc.inc found
+in the CC5X directory, or use nested include of this file (with full
+path name): +c:\progra~1\cc5x\reloc.inc
+
+The folder path to the assembler in file 'reloc.inc' may have to be
+changed depending on the installation of MPLAB/MPASM.
+
+Other options can also be put into file 'reloc.inc'.
+
+File 'LINKER.TXT' contains the main information on linker support.
+
+Please refer to 'LINKER.TXT' in the CC5X package to find out how to
+make the linker script file. Option '-r2' is recommended. Note that
+the standard MPLAB linker script files (for example 16f877.lkr)
+should be adapted according to the description found in this file.
+
+The Build all (ctrl-F10) will build the project. The Output window
+will state BUILD SUCCEEDED or BUILD FAILED. If build failed it will
+be required to correct the wrong input. It possible to use POINT-
+AND-CLICK on the error messages. For linker script errors, please
+refer to MPLINK documentation.
+
+On successful build it will be possible to run and debug the code in
+ICD2 or the MPLAB simulator, or simply program the device for
+normal target execution.
+
+Note that it is MPASM/MPLINK that generates the COD file when using
+multiple modules. The -CA and -CC compiler options will not have any
+effect. Debugging (single step etc.) can only use the generated
+assembly files as source when using MPLINK.
+
+
+Example programs:
+
+The example program found in file LINKER.TXT in the CC5X package can
+be tried. Note that using an external linker like MPLINK is
+significantly more difficult than the default single module mode.
+
+
+
+MPLAB VERSION 5
+---------------
+
+NOTE that MPLAB version 6 and later have a separate description.
+
+The CC5X compiler can be used inside the MPLAB suite. Note that
+CC5X can only run in command-line mode.
+
+Installing CC5X in MPLAB 5:
+
+1. First install CC5X on your computer as described initially.
+
+2. Then copy the files CC5X.MTC and TLCC5X.INI from the CC5X folder
+   (directory) to the MPLAB folder (this folder contains other .ini
+   and .mtc files).
+
+3. Next time MPLAB is started, select the Project->Install Language
+   Tool menu item. Select CC5X from the Language Suite. Then the
+   Tool Name (C-Compiler). Then the right executable, for example:
+
+     c:\progra~1\cc5x\cc5x.exe
+
+   Note that the Browse button can be used to find the executable.
+   Also mark the Command-line box. Then click OK. CC5X will then be
+   one of the selectable tools in MPLAB.
+
+The following is a brief description on how to use CC5X on a new
+project under MPLAB. Please refer to the help information available
+under MPLAB for a complete description.
+
+1. Start MPLAB and create a new project (Project->New Project).
+   Chose a project name (*.pjt) and a directory where to locate this
+   file and the other project files (C,H,HEX,ASM). Type <Enter> or
+   the OK button.
+
+2. Edit Project is the next window. MPLAB suggests a Target Filename
+   based on the project name. This is automatically changed during
+   step 4. Include Path should preferably point to the CC5X
+   directory to allow library header files to be included. "Library
+   Path" and "Linker Script Path" are not used. Use Development
+   Mode to select the processor and simulator/debugger (ignore any
+   MPLAB warning at the current stage). Change Language Tool Suite
+   to CC5X (this is one of the menu items if the installation steps
+   was completed).
+
+3. Double-click on the (target) name in the Project Files box. A
+   window named Node Properties pops up. The typical command line
+   options for CC5X are already marked. Options are disabled or
+   enabled by clicking on the box (second column) after the option
+   name. Note that the right Include Path (c:\progra~1\cc5x) is
+   required to make CC5X find the header files. Click the OK button.
+
+   MPLAB automatically supplies the processor type as a command line
+   option to the compiler.
+
+4. Click on the Add Node button. Type the name of your main C file
+   or chose an existing C file (sample1.c). It is recommended to try
+   one of the supplied example files initially. If the (sample) C
+   file does not reside in the selected project directory, copy it
+   to this directory first. Note that files included in the main C
+   file (and nested include) must not be listed in the Project Files
+   box. Click the OK button.
+
+5. Open the main C file (File->Open or Ctrl-O). Compile the file
+   using Project->Make Project (or F10). Note that Project->Build
+   Node (Alt-F10) requires that the main C file is in the current
+   active window. Double-click on the error messages (if any) and
+   correct the C code. Repeat the compilation until there are no
+   error messages.
+
+   NOTE: If MPLAB says 'Build Failed' and there are no error
+   messages generated by the compiler, please go to main paragraph
+   'TROUBLESHOOTING' in this file.
+
+   Use File->Open to inspect the generated files. The *.occ file
+   contains compiler output information.
+
+   IMPORTANT: If you selected the Error File command line option,
+   then MPLAB will suppress the output from the compiler and display
+   the content of the *.err file only. Change this option to your
+   preferred setting. It may also be necessary to change some of the
+   command line options (Processor, Hex Format) if MPLAB pops up a
+   warning window.
+
+--> IMPORTANT: File 'linker.txt', section MPLAB SUPPORT contains a
+    description on how to link several modules by using CC5X, MPASM
+    and MPLINK.
+
+6. CC5X allows simulation in C or assembly mode using the COD file.
+   This is one of the compiler options: Debugging mode (C) or (ASM).
+   Change the compiler options setting by selecting the Project->
+   Edit project menu item. Double-click on the (target) file in the
+   Project Files. Click OK. If you need many command line options,
+   please read last paragraph 'USING OPTIONS IN A FILE'.
+
+7. Options->Development Mode can be used to set/change the debugging
+   tool (MPLAB-SIM Simulator, SIMICE, Emulator, etc.). You are then
+   ready to trace program execution.
+
+8. Watching variable contents during tracing:
+   MPLAB allows Watch windows containing variables to be defined.
+   Select Window->Watch Windows->New Watch Window. Select the
+   variable name. Select Properties. Select the right size (8,16,24,
+   32 bit). Select the Low:High byte order if the variable size if
+   more than 8 bit. Select the desired format (Hex,Decimal,
+   ASCII,..). It is possible to watch the same variable using
+   different formats. Close the Add Watch Symbol window when
+   finished. The INS key can be used to add a new symbol to the
+   current active Watch window.
+
+   Bit variables: it is recommended to first define a char variable
+   and use an overlay definition to define the bit.
+       char cx;
+       bit bx @ cx.0;
+   This simplifies watching the bit value.
+
+
+
+
+TROUBLESHOOTING
+---------------
+
+Problem A: MPLAB says 'Build Failed' and there are no error messages
+           generated by the compiler.
+
+   i) One cause is that CC5X was not started.
+      This can happen if the installation was not successful.
+
+      Cure: Select the Project->Install Language Tool menu item. Use
+      the Browse button to find the executable (cc5x.exe). Then
+      click OK.
+
+   ii) MPLAB may fail to compile if the command line including
+       options that starts cc5x is too long (around 148 characters
+       seems to be critical). This can happen if long path names are
+       used (for the include directory and/or the executable).
+
+      Cure: remove most command line options found in
+      Project->Edit Project..(target)..Node Properties.
+      This window tells which command line options are used. Click
+      OK. Then try to compile (using F10). It may be required to put
+      the command line options in a separate file to avoid this
+      problem (check next paragraph).
+
+      If compilation still fails, please count the number of
+      characters in the command line generated by MPLAB (Build
+      Results). If this command line which starts cc5x contains more
+      than 147 characters, please remove more options. It may even
+      be necessary to move the folders used closer to the root to
+      avoid very long path names. It should be easy to detect the
+      path names that are very long.
+
+
+Problem B: Project Build (F10) in MPLAB produces an empty window.
+
+   Cure: Same as Problem A, point ii).
+
+
+Generally, it is recommended to use one of the supplied examples
+initially. Also FEW command line options until a successful
+compilation is found.
+
+
+
+USING OPTIONS IN A FILE
+-----------------------
+
+All compiler options can be put in a file. Just separate them with a
+space or a new line. Also check the supplied file op.inc for details.
+
+The options that reside in a file should be disabled in MPLAB.
+Select Project->Edit Project..(target)..Node Properties, and make
+sure these options are disabled. Also, under additional command line
+options, add +op.inc (or another file name including path).
+
+The path to the option file can be omitted if the option file is
+put in the same folder as the other project files.
+
+It is possible to use several option files.

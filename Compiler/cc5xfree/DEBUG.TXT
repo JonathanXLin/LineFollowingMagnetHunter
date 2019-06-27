@@ -1,0 +1,291 @@
+
+DEBUGGING SUPPORT
+
+
+ICD AND ICD2 DEBUGGING
+----------------------
+
+  ICD and ICD2 debugging is supported through definitions in the
+  header file.
+
+  Note that the symbol ICD_DEBUG or ICD2_DEBUG need to be defined
+  BEFORE the header file is compiled. The details on how to do this
+  is found in file chip.txt.
+
+
+
+COD FILE FOR DEBUGGING
+----------------------
+
+CC5X supports the COD file format for debugging purposes. Two modes
+of source file debugging is available:
+
+a) Using the C source file(s).
+
+b) Using the generated assembly file as the source file. An
+   advantage of this mode is the many ways to alter the format of
+   the assembly file in order to suit the debugging tool. Take a
+   look at the assembly file options. Some suggestions:
+
+     -A1+6+10 -AmiJ    : simulator I
+     -A1+6+6  -AmiJs   : simulator II
+     -A6+8+12Jt        : compact I
+     -Am6+8+12Jt       : compact II
+
+
+
+COMMAND LINE OPTIONS
+--------------------
+
+Enabling the COD-file is done by a command line option:
+
+    -CC<filename> : generate debug file using C source file(s).
+                    <filename> is optional. The asm file option is
+                    also switched on.
+
+    -CA<filename> : generate debug file using generated assembly
+                    file as source. <filename> is optional.
+                    The asm file option is also switched on.
+
+
+
+MPLAB SUPPORT
+-------------
+
+The CC5X compiler can be used inside the MPLAB environment. Please
+note that CC5X is a command-line program (WIN32/DOS16).
+
+Refer to file 'INSTALL.TXT' for information about installation and
+usage.
+
+
+
+ASSERT STATEMENTS
+-----------------
+
+Assert statements allows messages to be passed to the simulator,
+emulator, etc.
+
+Syntax:
+    #pragma assert [/] <type> <text field>
+
+    [/] : optional character
+
+    <type> : a = user defined assert
+             e = user defined emulator command
+             f = user defined printf
+             l = user defined log command
+
+    <text field> : any text string, valid to the end of
+                   the line. The line can be extended by a '\'
+                   character like other preprocessor statements.
+
+    #pragma assert /e text passed to the debugger
+    #pragma assert e text passed to the debugger
+
+    #pragma assert ; this assert command is ignored
+
+    NOTE 1: comments in the <text field> will not be removed,
+    but passed to the debugger.
+
+    NOTE 2: Only ASCII characters are allowed in the assert text
+    field. However, a backslash allows some translation:
+       \a => 7  : 0x7
+       \b => 8  : 0x8
+       \f => 12 : 0xC
+       \n => 10 : 0xA
+       \r => 13 : 0xD
+       \t => 9  : 0x9
+       \v => 11 : 0xB
+       \0 => 0  : 0x0
+       \1 => 1  : 0x1
+       \2 => 2  : 0x2
+       \3 => 3  : 0x3
+       \4 => 4  : 0x4
+       \5 => 5  : 0x5
+       \6 => 6  : 0x6
+       \7 => 7  : 0x7
+
+
+USE OF MACRO'S: Macro's can be used inside assert statements
+with some limitations. The macro should cover the whole text
+field AND the <type> identifier (or none of them). Macro's
+limited to a part of the text field are not translated. Macro's
+can be used to switch on and off a group of assert statements
+or to define similar assert statements.
+
+    #define COMMON_ASSERT a text field
+    #define AA /
+    ..
+    #pragma assert COMMON_ASSERT
+    #pragma assert AA a text field
+
+    /* Macro AA can then be used to disable a group of assert
+       statements. (#define AA ;) */
+
+    #define XX /a  /* this will NOT work */
+    #pragma assert XX causes an error message
+
+
+NOTES
+-----
+
+1) The source /listing information blocks in the COD file allows
+   indication of FUNCTION START, INTERRUPT ROUTINE START, and
+   ASSERT MACROS lines in the source file. Such information is
+   currently not generated.
+
+2) LOCAL SYMBOL INFORMATION is not generated. Instead, local
+   symbols are mapped to global symbols just like in the assembly
+   file (by adding an extension in case of name collisions).
+
+3) Only one MEMORY MAP BLOCK is stored. This allows a total of
+   128 codepage/origin changes in the source file. (Count the
+   number of ORG lines in the assembly file in case of error).
+
+4) CC5X stores the full pathname in the source file name blocks.
+   The rules are:
+
+        filname.ext         -> X:\SUB1\filname.ext
+        sub\filname.ext     -> X:\SUB1\sub\filname.ext
+        x:kat1\filname.ext  -> NO CHANGE
+        \kat1\filname.ext   -> NO CHANGE
+        ..\katx\filname.ext -> NO CHANGE
+
+
+Please send a report to B Knudsen Data (support@bknd.com)
+if things does not work as expected on the debugging tool, or if
+some missing features are strongly required.
+
+
+
+COD FILE WRITTEN
+----------------
+
+ 1. Directory block (first 64 k segment only)
+ 2. Code blocks
+ 3. Memory map blocks (currently 1 block)
+ 4. Source file name blocks
+ 5. Source/listing file information blocks (line number info)
+ 6. Symbol table blocks (short)
+ 7. Long symbol table information blocks
+ 8. Messages to source level debuggers (assert macros)
+
+
+
+DEBUGGING IN ANOTHER ENVIRONMENT
+--------------------------------
+
+Testing a program larger than 500-1000 instructions can be
+difficult. It is possible to debug parts of the program in the
+Windows/MSDOS environment. Another C compiler have to be used for
+this purpose.
+
+Using another environment has many advantages, like faster
+debugging, additional test code, use of printf(), use of
+powerful debuggers, etc. The disadvantage is that some
+program rewriting is required.
+
+All low level activity, like IO read and write, have to be
+handled different. Conditional compilation is recommended. This
+also allows additional test code to be easily included.
+
+    #ifdef SIM
+      // simulated sequence
+      // or test code (printf statements, etc.)
+    #else
+      // low-level PICmicro code
+    #endif
+
+
+The following can be compiled and debugged without modifications:
+
+    1. General purpose RAM access
+
+    2. Bit operations (overlapping variables requires care)
+
+    3. Use of FSR and INDF (with some precautions)
+
+    4. Use of rl(), rr(), swap(), and nop().
+       Carry can be used together with rl() and rr(). Direct
+       use of Zero_ should be avoided.
+
+    5. Use of the W register
+
+
+
+The recommended sequence is to:
+
+  1. Write the program for the actual PICmicro device.
+
+  2. Continue working until it can be compiled successfully.
+
+  3. Debug low-level modules separately by writing small test
+     programs (i.e. for keyboard handling, displays, IIC-bus
+     IO, RT-clocks).
+
+  4. Add the necessary SIM code and definitions to the code.
+     Debug (parts of) the program in another environment. Writing
+     alternative code for the low-level modules is possible.
+
+  5. Return to the PIC environment and compile with SIM
+     switched off and continue debugging using the actual chip.
+
+
+
+// SOME DEFINITIONS FOR SIMULATION
+
+#ifdef SIM
+
+  #define byte unsigned char
+
+  #define bit char
+
+  /* The default char type should be set to unsigned (by
+     a command line option) */
+
+  // define the carry-flag and W as global registers
+  bit Carry;
+  byte W;
+
+  byte *FSR;
+  #define INDF *FSR
+  // Operation like
+  //    FSR = &a0;
+  //    INDF = W;
+  // now becomes compilable and executable.
+  //
+  // NOTE: some compilers allocate variables in the opposite
+  // direction, from high addresses towards low addresses.
+  // Arrays should therefore be written as:
+  //     char table[4];
+
+
+  // operations like swap(), rl(), rr() can still be handled
+
+  byte swap( byte a)
+  {
+      return (a & 0xF) * 16 + a / 16;
+  }
+
+  byte rl( byte a)
+  {
+      byte r = a * 2;
+      if ( Carry != 0)
+          r += 1;
+      Carry = (a >= 0x80);
+      return r;
+  }
+
+  byte rr( byte a)
+  {
+      byte r = a / 2;
+      if ( Carry != 0)
+          r += 0x80;
+      Carry = (a & 1);
+      return r;
+  }
+
+  void nop( void)   {  }
+
+#endif

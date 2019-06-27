@@ -1,0 +1,139 @@
+
+APPLICATION NOTES FOR SPECIAL STARTUP REQUIREMENTS
+
+Applies to 12C50X, 12C67X, 12F6XX, 12CE67X, 16F87X and similar.
+
+
+
+SPECIAL STARTUP SEQUENCES
+-------------------------
+
+  ICD debugging requires a NOP instruction at address 0.
+
+  Note that this and other definitions for ICD debugging is selected
+  by defining the symbol ICD_DEBUG (see chip.txt) before compiling
+  the header file.
+
+    #include "hexcodes.h"
+    #pragma cdata[0] = __NOP
+    #pragma resetVector 1    // change to address 1
+
+
+
+
+INSERTING SPECIAL INSTRUCTIONS OR DATA AT CERTAIN LOCATIONS:
+------------------------------------------------------------
+
+  The following #pragma will insert a code/data word at a certain
+  location in the program memory:
+
+    #pragma cdata[ADDRESS] = VALUE  // or EXPRESSION
+    ADDRESS: 0 .. 0x7FFE
+    VALUE: 0 .. 0x3FFF
+
+  There is no check on validity of the inserted data or address. The
+  data is added at the end of the assembly and hex file.
+
+  It is even possible to overwrite assembled instructions. However,
+  this is normally not recommended since it is not defined how the
+  device programmer (or assembler) handles this conflict.
+
+
+
+RESET VECTOR NOTES
+------------------
+
+ Removing the reset vector:
+
+   #pragma resetVector -
+
+ Setting the reset vector to address 2:
+
+   #pragma resetVector 2
+
+
+
+
+12C50X/12CE51X/16C505 WINDOWED DEVICES
+--------------------------------------
+
+  When using the internal oscillator on UV erasable (windowed)
+  devices, the calibration value have to be reprogrammed
+  after erasure. This is done by first adding the following to the
+  application program:
+
+    #include "hexcodes.h"
+    #ifdef CalValue
+     #define ResetAddress  0x3FF   // 16C509(A)
+     #pragma cdata[ResetAddress] = __MOVLW(CalValue)
+    #endif
+    ..
+    void main( void)
+    {
+        OSCCAL = W;
+        ..
+    }
+
+  First usage of device: read calibration value at address 0x3FF/0x1FF
+  using your device programming equipment.
+
+  After erasure of device:
+   a) Add COMMAND LINE option, and replace NN
+      with the actual value for the device:  -DCalValue=0xNN
+   b) Alternatively use  #define CalValue 0xNN
+      and replace NN with the actual value for the device. The value
+      have to be changed for each device used.
+
+
+
+12C67X/12CE67X: CALIBRATION OF THE INTERNAL OSCILLATOR
+------------------------------------------------------
+
+  The following instruction sequence will initialize the calibration
+  register when using the internal oscillator:
+
+    #include "hexcodes.h"
+    #if defined _16C671  ||  defined _12CE673 || \
+        defined _12F629  ||  defined _12F675
+     #define ADDRESS_LAST_CODE_LOCATION 0x3FF
+    #elif defined _16C672  ||  defined _12CE674
+     #define ADDRESS_LAST_CODE_LOCATION 0x7FF
+    #endif
+
+    ..
+    #asm
+     DW __CALL(ADDRESS_LAST_CODE_LOCATION)
+    #endasm
+    OSCCAL = W;
+    ..
+
+  NOTE that the above CALL requires that there is a preprogrammed
+  RETLW at the last location. Microchip delivers devices with the
+  RETLW preprogrammed. The RETLW is not available on the MPLAB
+  simulator and will be gone after erasing the device. It is
+  possible to use #pragma cdata to insert a RETLW manually.
+
+
+  *** Windowed devices ***
+  First usage of device: read calibration value at address 0x3FF/
+  0x7FF using your device programming equipment.
+
+  Add the following initialization code:
+
+   #ifdef CalValue
+    OSCCAL = CalValue;
+   #else
+    #asm
+     DW __CALL(ADDRESS_LAST_CODE_LOCATION)
+    #endasm
+    OSCCAL = W;
+   #endif
+
+  After erasure of device:
+   a) Add COMMAND LINE option, and replace NN
+      with the actual value for the device:  -DCalValue=0xNN
+   b) Alternatively use  #define CalValue 0xNN
+      and replace NN with the actual value for the device. The value
+      have to be changed for each device used.
+
+

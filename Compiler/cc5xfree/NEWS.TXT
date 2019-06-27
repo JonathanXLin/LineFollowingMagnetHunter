@@ -1,0 +1,589 @@
+
+NEWLY ADDED FEATURES *** CC5X
+-----------------------------
+
+NOTE: the newly added features are listed first.
+
+
+>> Version 3.2K released
+
+
+>> Version 3.2I released
+
+
+** New type modifier 'shadowDef'
+
+  The 'shadowDef' type modifier allow local and global
+  variables and function parameters to be assigned to
+  specific addresses without affecting normal variable
+  allocation. The compiler will ignore the presense of these
+  variables when allocating global and local variable space.
+
+    shadowDef char gx70 @ 0x70;  // global or local variable
+
+  The above definition allow location 0x70 to be inspected and
+  modified through variable 'gx70'.
+
+
+** Assigning function parameters to specific locations
+
+  Function parameters can be assigned to addresses. No other
+  variables will be assigned by the compiler to these
+  locations. Such manual allocation can be useful when
+  reusing RAM locations manually.
+
+    void writeByte(char addr @ 0x70, char value @ 0x71) { .. }
+
+  This syntax is also possible on function prototypes.
+
+
+** main() can reside in any codepage
+
+  It is possible to locate main() in any codepage if the
+  reset vector is omitted. This is done by a pragma statement.
+
+    #pragma resetVector -
+
+  Proper startup code must be inserted manually when removing
+  the automatic reset vector, for example by cdata[] statements
+  (cdata.txt).
+
+
+>> Version 3.2G released
+
+
+** Support for __config and __idlocs
+
+  The compiler will use __config and __idlocs in the
+  generated assembly file when #pragma config is used in the
+  C source. The old assembly format is still available by
+  using the command line option -cfc.
+
+
+** Macro's __DATE__ and __TIME__
+
+  Macro's for date and time are defined when compilation starts.
+
+    Macro      Format          Example
+    __TIME__   HOUR:MIN:SEC    "23:59:59"
+    __DATE__   MONTH DAY YEAR  "Jan  1 2005"
+    __DATE2__  DAY MONTH YEAR  " 1 Jan 2005"
+
+
+>> Version 3.2F released
+
+
+** Custom warnings and simple messages
+
+  A custom warning or a simple message can be printed in the
+  compiler output and to the .occ file. Option -S will suppress
+  this. "warning" and "message" are not reserved keywords. Note
+  that these directives are not standard C.
+
+    #message This is message 1
+    #message This is message 2
+    #warning This is a warning
+
+  The following output is produced:
+
+    Message: This is message 1
+    Message: This is message 2
+    Warning test.c 7: This is a warning
+
+
+>> Version 3.2A released
+
+
+** Functions shared between independent call trees
+
+  An error message is normally printed when the compiler detects
+  functions that are called both from main() and during interrupt
+  processing if this function contains local variables or
+  parameters. This also applies to math library calls and const
+  access functions. The reason for the error is that local variables
+  are allocated statically and may be overwritten if the routine is
+  interrupted and then called during interrupt processing.
+
+  The error message will be changed to a warning by the following
+  pragma statement. Note that this means that local variable and
+  parameter overwriting must be avoided by careful code writing.
+
+    #pragma sharedAllocation
+
+
+** Improved inline assembly
+
+   The following address operations is possible when the variable/
+   struct/array set to a fixed address.
+
+     char tab[5] @ 0x110;
+     struct { char x; char y; } stx @ 0x120;
+    #asm
+     MOVLW tab
+     MOVLW &tab[1]
+     MOVLW LOW &tab[2]
+     MOVLW HIGH &tab[2]
+     MOVLW UPPER &tab[2]
+     MOVLW HIGH (&tab[2] + 2)
+     MOVLW HIGH (&stx.y)
+     MOVLW &stx.y
+     MOVLW &STATUS
+    #endasm
+
+
+** Output from preprocessor
+
+   The compiler will write the output from the preprocessor
+   to a file (.CPR) when using the -B command line option.
+   Preprocessor directives are either removed or simplified.
+   Macro identifiers are replaced by the macro contents.
+
+     -B[pims]  : write output from preprocessor to <src>.cpr
+        p  : partial preprocessing
+        i  : .., do not include files
+        m  : .., modify symbols
+        s  : .., modify strings
+
+   When using the alternative preprocessing formats (-Bpims),
+   compilation will stop after proprocessing.
+
+
+>> Version 3.2 released
+
+
+** New math operator
+
+   Applies to 8*8 signed multiplication:
+
+     int 8 a, b;
+     int16 r = (int16)a * b;
+
+   The following operator is added to math16.h, math24.h and math32.h:
+
+     int16 operator* _multS8x8( int8 arg1, int8 arg2);
+
+
+** Direct coded instructions
+
+   The file "hexcodes.h" contains C macro's that allow direct coding
+   of instructions.
+
+   Note that direct coded instructions are different from inline
+   assembly seen from the compiler. The compiler will view the
+   instruction codes as values only and not as instructions. All
+   high level properties are lost. The compiler will reset
+   optimization, bank updating, etc. after a DW statement.
+
+   Example usage:
+     #include "hexcodes.h"
+     ..
+     // 1. In DW statements:
+     #asm
+     DW __DECF(__FSR,__F)         // Decrement FSR
+     DW __BCF(__STATUS,__Carry)   // Clear Carry bit
+     DW __GOTO(0)                 // Goto address 0
+     #endasm
+     ..
+     // 2. In cdata statements:
+     #pragma cdata[1] = __GOTO(0x3FF)
+
+
+** RAM bank update settings
+
+   #pragma updateBank can be used to instruct the bank update
+   algorithm to do certain selections. These statements can only be
+   used inside a function:
+
+     #pragma updateBank entry = 0
+     /* The 'entry' bank force the bank bits to be set
+        to a certain value when calling this function */
+
+     #pragma updateBank exit = 1
+     /* The 'exit' bank force the bank bits to be set 
+        to a certain value at return from this function */
+
+     #pragma updateBank default = 0
+     /* The 'default' bank is used by the compiler at
+        loops and labels when the algorithm give up
+        finding the optimal choice */
+
+
+** Origin alignment
+
+   It is possible to use #pragma origin to ensure that a computed
+   goto inside a function does not cross a 256 word address
+   boundary. However, this may require many changes during program
+   development. An alternative is to use #pragma alignLsbOrigin to
+   automatically align the least significant byte of the origin
+   address. Note that this alignment is not possible when using
+   relocatable assembly, and also that it does not apply to the 12
+   bit core.
+
+   Example: A function contain a computed goto. After inspecting the
+   generated list file, there are 16 instructions between the
+   function start and the first destination address (offset 0) right
+   after the ADDWF PCL,0 instruction that perform the computed goto.
+   The last destination address (offset 10) resides 10 instructions
+   after the first destination. A fast a compact computed goto
+   requires that the first and last destination resides on the same
+   "byte page" (i.e. (address & 0xFF00) are identical for the two
+   addresses). This is achieved with the statement:
+
+     #pragma alignLsbOrigin -16 to 255 - 10 - 16
+
+   The alignment pragma statement is not critical. The compiler will
+   generate an error (option -GS) or a warning (-GW) if the computed
+   goto cross a boundary because of a wrong alignment. An easier
+   approach is to align the LSB to a certain value (as long as
+   program size is not critical).
+
+     #pragma alignLsbOrigin 0            // align on LSB = 0
+     #pragma alignLsbOrigin 0 to 190     // [-255 .. 255]
+     #pragma alignLsbOrigin -100 to 10
+
+
+>> Version 3.1K released
+
+
+** Easier storing of unpacked strings in EEPROM
+
+   The compiler will normally store cdata strings as 2*7 bits
+   packed data. This is now selectable.
+
+     // Store strings packed by default
+     #pragma cdata[0x800] = "Hello world!\0"
+
+     #pragma packedCdataStrings 0
+     // Store following strings unpacked
+     #pragma cdata[0x2100] = "Hello world!\0"
+     #pragma cdata[] = 1, 0x80
+     // Next statement is legal, but EEPROM use 8 bit only
+     //#pragma cdata[] = 0x3FFF
+
+     #pragma packedCdataStrings 1
+     // Store remaining strings packed
+
+
+** Improved const data initialization
+
+   Floating point constant expressions.
+
+   Complex address calculations.
+
+   Enum-symbols allowed.
+
+
+** Extra config register supported
+
+   Enabled in the header file (#pragma config_reg2 0x2008).
+
+     #pragma config reg2 = 0x1 | 0x2
+
+   See CONFIG.TXT
+
+
+>> Version 3.1J released
+
+
+** Improved integer math
+
+   New math library functions for 16*16 and 32*16 bit
+   multiplication, signed and unsigned.
+
+     math24.h: int24 operator* _multS16x16( int16 arg1, int16 arg2);
+     math24.h: int8  operator% _remS24_8( int24 arg1, int8 arg2);
+
+     math32.h: uns32 operator* _multU16x16( uns16 arg1, uns16 arg2);
+     math32.h: int32 operator* _multS16x16( int16 arg1, int16 arg2);
+     math32.h: uns32 operator* _multU32x16( uns32 arg1, uns16 arg2);
+     math32.h: int32 operator* _multS32x16( int32 arg1, int16 arg2);
+     math32.h: int8  operator% _remS32_8( int32 arg1, int8 arg2);
+
+   Inline multiplication will now optimize for speed instead of size
+   for signed integer multiplication. Optimization for size on
+   inline multiplication (signed and unsigned) can be forced by
+   command line option -zZ.
+
+
+** Improved integer math libraries
+
+   Improved 16 * 16 bit multiplication.
+
+     math24.h: int24 operator* _multS16x16( int16 arg1, int16 arg2);
+     math24.h: int8  operator% _remS24_8( int24 arg1, int8 arg2);
+
+     math32.h: uns32 operator* _multU16x16( uns16 arg1, uns16 arg2);
+     math32.h: int32 operator* _multS16x16( int16 arg1, int16 arg2);
+     math32.h: int8  operator% _remS32_8( int32 arg1, int8 arg2);
+
+
+>> Version 3.1I released
+
+
+** Switch statements of 16, 24 and 32 bit
+
+   The switch statement now supports variables up to 32 bit. The
+   generated code is more compact and executes faster than the
+   equivalent 'if - else if' chain.
+
+
+>> Version 3.1H released
+
+
+** Macro stringification and concatenation
+
+   The concatenation operator ## allows tokens to be merged while
+   expanding macros. The stringification operator # allows a macro
+   argument to be converted into a string constant.
+
+
+>> Version 3.1G released
+
+
+** Syntax improvements
+
+   Multiple assignment:
+     a = b = c;
+
+   Allowing the increment operator on the left side of a statement:
+     ++i;
+     --x;
+
+   Improved "increment" part of the 'for' statement :
+     for (i=0; i<5; a.b[x]+=2) ..
+
+   Better paranthesis support :
+     *(p)
+     (p)[0]
+     &(l.a)
+
+   Better 'enum' support :
+     typedef enum ..
+     enum con { Read_A, .. };
+     enum con mm;
+     mm = Read_A;
+
+
+** Placing the interrupt routine anywhere
+
+   The interrupt routine normally have to reside on address 4. The
+   following pragma statement will allow the interrupt routine to be
+   placed anywhere. Note that the compiler will NOT generate the
+   link from address 4 to the interrupt routine.
+
+     #pragma unlockISR
+
+
+** Printing key info in the assembly file
+
+   The compiler will print info at the end of the assembly file.
+   Total code size, code size on each code page, maximum call level,
+   RAM usage. In addition, the size of each function is printed.
+   Command line option -Au removes this information.
+
+
+>> Version 3.1F released
+
+
+** Detailed multiline macro expansion in assembly file
+
+   Single lines from multiline macro's are printed in the generated
+   assembly file when using command line option -AR. This is
+   sometimes useful to improve readability when expanding very long
+   macro's.
+
+
+** Recursive printing of errors in macro's
+
+   If there is a syntax error in a defined macro, then it may be
+   difficult to decide what the problem actually is. This is
+   improved by printing extra error messages which points to the
+   macro definition, and doing this recursively when expanding
+   nested macro's.
+
+
+** Automatic incrementing version number in file
+
+   CC5X is able to automatically increment one or more version
+   numbers for each compilation. Syntax supported:
+
+   1.  Option : -ver#verfile.c
+       #include "verfile.c"  // or <verfile.c>
+
+   2.  Option : -ver
+       #pragma versionFile   // next include is version file
+       #include "verfile.c"  // or <verfile.c>
+
+   3.  Option : -ver
+       #pragma versionFile "verfile.c"  // or <verfile.c>
+
+   Note that the command line option is required to make this
+   increment happen. It is the decimal number found at end of
+   the included file that is incremented. The updated file is
+   written back before the file is compiled. No special syntax is
+   assumed in the version file. Suggestions:
+
+     #define MY_VERSION  20
+     #define VER_STRING  "1.02.0005"
+     /* VERSION : 01110 */
+
+   If the decimal number is 99, then the new number will be 100 and
+   the file length increases by 1. If the number is 099, then the
+   file length remains the same. A version file should not be too
+   large (up to 20k), otherwise an error is printed.
+
+   Formats 2 and 3 above allows more than one version file. It is
+   recommended to use conditional compilation to manage several
+   editions of the same program.
+
+
+>> Version 3.1E released
+
+
+** Detection of REGISTER saving and restoring during interrupt
+
+   CC5X will AUTOMATICALLY check that the registers W, STATUS,
+   PCLATH and FSR are saved and restored during interrupt.
+
+   The details about this is found in file 'int16Cxx.h'.
+
+   The error and warning messages printed can be removed:
+
+     #pragma interruptSaveCheck  n  // no warning or error
+     #pragma interruptSaveCheck  w  // warning only
+     #pragma interruptSaveCheck  e  // error and warning (default)
+
+
+>> Version 3.1D released
+
+
+** Better variable overlapping
+
+   Variables can overlap parts of another variable, table or
+   structure. Multiple levels of overlapping is allowed.
+
+     char aa @ ttb[2];   // char ttb[10];
+     bit  ab @ aa.7;     // a second level of overlapping
+     bit  bb @ ttb[1].1;
+     size2 char *cc @ da.a;  // 'da' is a struct
+     char dd[3] @ da.sloi[1].pi.ncup;
+     uns16 ee @ fx.mid16;  // float32 fx;
+     TypeX ii @ tab;   // TypeX is a typedef struct
+
+
+** Using expressions to define addresses
+
+   An expression can now define the address of a variable. This
+   makes it easier to move a collection of variables.
+
+     char tty @ (50+1-1+2);
+     bit  tt1 @ (50+1-1+2+1).3;
+     bit  tt2 @ (50+1-1+2+1).BX1;   // enum { .., BX1, .. };
+
+
+** Address operations
+
+   The logic for checking address operations is enhanced. The
+   supported operations are:
+
+     ADR + EXPRESSION (VARIABLE/CONST)
+     ADR - EXPRESSION (VARIABLE/CONST)
+     ADR & 0xFF;   // LSB : least significant 8 bits
+     ADR % 256;    // LSB : least significant 8 bits
+     ADR >> 8;     // MSB : most significant bit(s)
+     ADR / 256;    // MSB : most significant bit(s)
+
+   Example:
+     FSR = &table[3] & 0xFF;
+     IRP = &table[3] >> 8;   // on devices using 9 bit address
+
+   A warning is printed when using other address operations (for
+   example &p | 3). This warning is changed to an error when using
+   relocatable assembly (option -r).
+
+
+** Combining inline integer math and library calls
+
+   It is possible to force the compiler to generate inline integer
+   math code after a math library is included. This may be useful
+   when speed is critical or in the interrupt service routine.
+   Functions with parameters or local variables are not reentrant
+   because local variables are mapped to global addresses, and
+   therefore the compiler will not allow calls from both main and
+   the interrupt service routine to the same function.
+
+     uns16 a, b, c;
+     ..
+     a = b * c;    // inline code is generated
+     ..
+    #include "math16.h"
+     ..
+     a = b * c;    // math library function is called
+     ..
+    #pragma inlineMath 1
+     a = b * c;    // inline code is generated
+    #pragma inlineMath 0
+     ..
+     a = b * c;    // math library function is called
+
+
+** Inline type modifier on math operations
+
+   It is possible to combine inline integer math and math library
+   functions without making a special purpose math library. This is
+   done by stating that the selected operations are inline BEFORE
+   the standard math library is included. It is optimal to use
+   inline code when there is only one operation of a certain type.
+
+     inline uns24 operator * (uns24 arg1, uns24 arg2);
+     #include "math24.h"
+
+   The math prototypes are found in the beginning of the standard
+   math libraries. Just remember to remove the operator name before
+   adding the inline type modifier.
+
+   A warning is printed when there is ONE call to a unsigned integer
+   math library function. The warning can be disabled by the -wm
+   command line option.
+
+   NOTE that the inline type modifier is currently IGNORED, except
+   for the math operations.
+
+
+** Detection of multiple inline math integer operations
+
+   The compiler will print a warning when detecting more than one
+   inline math integer operation of the same type. Including a math
+   library will save code, but execute slightly slower. Note that
+   assembly code inspection and type casts are sometimes needed to
+   reduce the number of library functions inserted.
+
+   The warning can be disabled by the -wi command line option.
+
+
+** Reading program memory on more devices
+
+   The compiler will now read program memory directly on devices
+   having the predefined registers:
+
+     PMDATA, PMADR,  PMDATH, PMADRH : 16C925/926, 16F73/74/76/77
+     PMDATL, PMADRL, PMDATH, PMADRH : 16C717/770/771, 16C781/782
+
+   The compiler will use computed goto (more code, but faster)
+   instead of direct program memory reading when using:
+
+     #pragma wideConstData 8192
+
+
+>> Version 3.1C released
+
+
+** cdata outside legal program and eeprom space is disabled
+
+   CODE:   0x0000 - upper program limit
+   EEPROM: 0x2100 - 0x21FF : eeprom data space
+
+   The error message can be changed to a warning by using the -cd
+   command line option.
+
+

@@ -1,0 +1,316 @@
+
+INLINE ASSEMBLY
+---------------
+
+The CC5X compiler supports inline assembly. Currently, assembly
+instructions have to be located inside a C function.
+
+    #asm
+     .. assembly instructions
+    #endasm
+
+
+Features:
+* many assembly formats
+* equ statements can be converted to variable definitions
+* macro and conditional assembly capabilities
+* call C functions and access C variables
+* C style comments is possible
+* optional optimization
+* optional automatic bank and page updating
+
+
+Note that the file 'inline.h' is for emulating inline assembly, and
+should NOT be included when using real inline assembly. The compiler
+does not optimize inline assembly or update the bank or page bits
+unless it is instructed to do so.
+
+
+Inline assembly is NOT C statements, but are executed in between the
+C statements. It is not recommended to write the code like this:
+
+    if (a==b)
+       #asm
+        nop  // this is not a C statement (by definition)
+       #endasm
+    a = 0;  // THIS is the conditional statement!!!
+
+
+Inline assembly supports DW. This can be used to insert data or
+special instructions. CC5X will assume that the data inserted are
+instructions, but will not interpret or know the action performed.
+Bank selection bits are assumed to be undefined when finishing
+executing DW instructions. PCLATH bit 3 (and 4) must remain
+unchanged or restored to correct value if more than one code page is
+available on the device. Example use is found in startup.txt.
+
+  #asm
+   DW 0x3FFF   ; any data or instruction
+   DW /*CALL*/ 0x2000 + ADDRESS
+  #endasm
+
+
+Assembly instructions are not case sensitive. However, variables and
+symbols requires the right lower or upper case on each letter.
+
+    clrw
+    Nop
+    NOP
+
+
+The supported operand formats are:
+
+    k      EXPR
+    f      VAR + EXPR
+    f,d    VAR + EXPR, D
+    f,b    VAR + EXPR, EXPR
+    a      LABEL or FUNCTION_NAME
+
+    EXPR :=  [  EXPR OP EXPR  |  (EXPR)  |  -EXPR  ]
+    EXPR := a valid C constant expression, plus assembly extensions
+
+
+Constant formats:
+
+    MOVLW 10            ; decimal radix is default
+    MOVLW 0xFF          ; hexadecimal
+    MOVLW 0b010001      ; binary      (C style)
+    MOVLW 'A'           ; a character (C style)
+    MOVLW .31           ; decimal constant
+    MOVLW .31 + 20 - 1  ; plus and minus are allowed
+    MOVLW H'FF'         ; hexadecimal (radix 16)
+    MOVLW h'0FF'
+    MOVLW B'011001'     ; binary (radix 2)
+    MOVLW b'1110.1101'
+    MOVLW D'200'        ; decimal (radix 10)
+    MOVLW d'222'
+    MOVLW MAXNUM24EXP   ; defined by  EQU or #define
+    ;MOVLW 22h          ; NOT allowed
+
+
+Formats when loading then result into the W register:
+
+    decf  ax,0
+    iorwf ax,w
+    iorwf ax,W
+
+
+Formats when writing the result back to the RAM register:
+
+    decf  ax
+    decf  ax,1
+    iorwf ax,f
+    iorwf ax,F
+
+
+Bit variables are accessed by the following formats:
+
+    bcf Carry
+    bsf Zero_
+    bcf ax,B2     ; B2 defined by EQU or #define
+    bcf ax,1
+    bcf STATUS,Carry  ; Carry is a bit variable
+
+
+Arrays, structures and variables larger than 1 byte can be
+accessed by using an offset.
+
+    clrf a32     ; uns32 a32;  // 4 bytes
+    clrf a32+0
+    clrf a32+3
+    clrf tab+9   ; char tab[10];
+    ; clrf tab-1 ; not allowed
+
+
+Labels can start anywhere on the line:
+
+    goto LABEL4
+
+   LABEL1
+   :LABEL2
+   LABEL3:
+
+ LABEL4  nop
+    nop
+    goto LABEL2
+
+
+Functions are called directly. A single 8 bit parameter can be
+transferred using the W register.
+
+    movlw 10
+    call f1    ; equivalent to  f1( 10);
+
+
+The ONLY way to transfer multiple parameters (and parameters
+different from 8 bit) is to end assembly mode, use C syntax and
+restart assembly mode again.
+
+   #endasm
+    func( a, 10, e);
+   #asm
+
+
+Some instructions are disabled, depending on core type:
+
+    option        ; 12 bits core only
+    tris PORTA    ; 12 bits core only
+
+    movwf OPTION  ; 14 bits core only
+    movwf TRISA   ; 14 bits core only
+
+    14 bit core note: The OPTION and TRIS instructions requires RP0
+    to be set to operate properly. Microchip included these
+    instructions for backward compatibility, but added the
+    requirement that RP0 have to be set. CC5X does not allow OPTION
+    and TRIS instructions on the 14 bit core. The MOVWF have to be
+    used instead.
+
+
+The EQU statement can be used for defining constants. Assembly
+blocks containing EQU's only can be put outside the functions. Note
+that Equ constants can only be accessed in assembly mode. Constants
+defined by #define can be used both in C and assembly mode.
+
+    #asm
+     B0              equ     0
+     B7              equ     7
+     MAXNUM24EXP     equ     0xFF
+    #endasm
+
+
+Equ can also be used to define variable addresses. However, the
+compiler do not know the know the difference between an Equ address
+and an Equ constant until it is used by an instruction. When an Equ
+symbol is used as a variable, that location is disabled for use by
+other variables. The symbol then changes from an Equ symbol to a
+variable symbol and is made available in C mode also. There is a
+slight danger in this logic. DO NOT USE a series of Equ's to define
+an array. If one of the locations are not read or written directly,
+the compiler will not know that it is a part of an array and may use
+it for other purposes. Reading and writing through FSR and INDF is
+not used to transform equ definitions. Therefore, define arrays by
+using C syntax (or #pragma char).
+
+    #pragma asm2var 1 // enable equ to variable transformation
+    ..
+    A1           equ     0x20
+    ..
+    CLRF A1  ;A1 changes from an equ constant to a char variable
+
+
+Comments types allowed in assembly mode:
+
+    NOP    ; a comment
+    NOP    // C style comments are also valid
+  /*
+    CLRW   ;
+    NOP    /* also nested C style comments are valid */
+  */
+
+
+Conditional assembly is allowed. However, the C style syntax have
+to be used.
+
+     #ifdef SYMBOLA
+      nop
+     #else
+      clrw
+     #endif
+
+
+C style macros can contain assembly instructions, and also
+conditional statements. Note that the compiler does not check the
+contents of a macro when it is defined.
+
+    #define UUA(a,b)\
+     clrw\
+     movlw a \
+     #if a == 10 \
+      nop        \
+     #endif      \
+     clrf b
+
+     UUA(10,ax)
+     UUA(9,PORTA)
+
+
+Note that labels inside a makro often need to be supplied as a
+parameter if the makro is used more than once. Also note that there
+should always be a backslash '\' after a #endasm in a macro to avoid
+error messages when this macro is expanded in the C code. This
+applies to all preprocessor statements inside macro's.
+
+   #define waitX(uSec, LBM)  \
+    #asm         \
+      LBM:       \
+          NOP    \
+          NOP    \
+          DECFSZ uSec,1 \
+          GOTO LBM \
+    #endasm      \
+
+    waitX(i, LL1);
+    waitX(i, LL2);
+
+
+Additional instructions can be defined using macros:
+
+    #define SKPC   BTFSS STATUS,Carry
+    #define SETC   BSF   STATUS,Carry
+
+    // defining a branch instruction:  BNC <label>
+    #define BNC    BTFSS STATUS,Carry \
+                   GOTO
+
+
+Most preprocessor statements can be used in assembly mode:
+
+     #pragma return[] = "Hello"
+     NOP
+
+
+The compiler can optimize and perform bank and page updating in
+assembly mode. This does not happen automatically, but has to be
+switched on in the source code. It is normally safe to switch on
+optimization and bank/page updating. Instructions updating the bank
+and page register are removed before the compiler insert new
+instructions. If the assembly contains critical timing, then the
+settings should be left off, at least in local regions.
+
+    #asm             // using default local settings
+    #endasm
+
+    // default local assembly settings are b- o- p-
+
+    #asm b+          // enable automatic bank updating
+    #endasm
+
+    #asm b- o- p+    // local settings
+    #pragma asm o+   // change setting in assembly mode
+    #endasm          // end current local setting
+
+    #pragma asm default b+ o+   // define new default setting
+
+    Interpretation:
+
+    o+ : current optimization is performed in assembly mode
+    o- : no optimization in assembly mode
+
+    b+ : current bank bit updating is performed in assembly mode
+    b- : no bank bit update in assembly mode
+
+    p+ : current page bit updating is performed in assembly mode
+    p- : no page bit update in assembly mode
+
+    Note that b+ o+ p+ means that updating is performed if the
+    current setting in C mode is on. Updating is NOT performed
+    if it is switched off in the C code when assembly mode starts.
+
+    The command line options -b, -u, -j will switch updating off
+    globally. The corresponding source code settings are then ignored.
+
+    CC5X use an advanced algorithm to update the bank selection
+    bits. Do not expect to find the updating right before or after
+    a banked access. Expect to find it at places that CC5X choses to
+    be optimal.

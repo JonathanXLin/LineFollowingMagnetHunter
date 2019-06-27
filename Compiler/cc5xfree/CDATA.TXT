@@ -1,0 +1,167 @@
+
+THE CDATA STATEMENT
+-------------------
+
+The cdata statement stores 14 bit data in program memory.
+
+NOTE 1: cdata[] can currently not be used with relocatable assembly. When
+using MPLINK, such data statements can be put in an assembly module.
+
+NOTE 2: Constant data should normally be stored using the 'const'
+type modifier. However, cdata[] is useful for storing EEPROM data,
+or data and instructions at fixed addresses.
+
+NOTE 3: There is no check on validity of the inserted data. However,
+it is NOT possible to overwrite program code and other cdata
+sections. The data is added at the end of the assembly and hex file
+in the same order as it is defined.
+
+NOTE 4: cdata outside legal program and EEPROM space is disabled.
+The error message can be changed to a warning by using the -cd
+command line option. EEPROM address range is 0x2100 - 0x21FF.
+
+
+SYNTAX
+  #pragma cdata[ADDRESS]   = <VXS>, .., <VXS>
+  #pragma cdata[]          = <VXS>, .., <VXS>
+  #pragma cdata.IDENTIFIER = <VXS>, .., <VXS>
+
+  ADDRESS: 0x0000 - 0x1FFF, 0x2100 - 0x21FF
+
+  VXS : < VALUE | EXPRESSION | STRING>
+  VALUE: 0 .. 0x3FFF
+  EXPRESSION: any valid C constant expression (i.e. 0x1000 | (3*1234))
+  STRING: "Valid C String\r\n\0\x24\x8\xe\xFF\xff\\\""
+
+  String translation:   
+        \0 => 0   \1 => 1    \2 => 2    \3 => 3    \4 => 4
+        \5 => 5   \6 => 6    \7 => 7    \a => 7    \b => 8
+        \t => 9   \n => 10   \f => 12   \v => 11   \r => 13
+        \\ => the backslash character itself (0x5C)
+        \" => '"' (0x22)
+        \xHH  or  \xH  : hexadecimal number
+        "\x1Conflict"  is better written as  "\x1" "Conflict"
+
+Strings are stored as 7 bit ASCII characters (14 bit core devices).
+The least significant 7 bits of each code word are filled first.
+
+Strings are aligned on word addresses for each <VXS>. However,
+alignment does not occur when writing  "abc" "def".
+
+IDENTIFIER: any undefined identifier. It is converted to a macro
+identifier and set to the current cdata word address. The purpose is
+to provide an automatic way to find the address of stored items.
+
+Empty cdata statements can be used to set or read the current
+cdata address.
+    #pragma cdata[ADDRESS]    // set current cdata address
+    #pragma cdata.IDENTIFIER  // "get" current cdata address
+
+Only cdata within the valid code space is counted when calculating
+the total number of code words.
+
+
+TYPICAL USAGE OF THE CDATA STATEMENT:
+
+1. Defining special startup sequences:
+
+    #include "hexcodes.h"
+    #pragma cdata[0] = __NOP
+    #pragma resetVector 1    // goto main at address 1
+
+
+2. Restoring calibration values:
+
+    #include "hexcodes.h"
+    #define ResetAddress  0x3FF   // 16C509(A)
+    #pragma cdata[ResetAddress]= __MOVLW(CalValue)
+
+
+3. Storing EEPROM data
+
+   EEPROM data can be put into the HEX file at addresses 0x2100 -
+   0x21FF for transfer to the internal EEPROM during programming of
+   a device. Note that only the lower 8 bit of the HEX value is used
+   for each EEPROM location. The compiler does not know how much
+   EEPROM space a device has.
+
+    #define EEPROM_START  0x2100
+    #pragma cdata[EEPROM_START]      // start of cdata block
+    #pragma cdata[] = 0x3F, 10, 'a'  // 3 bytes EEPROM data
+
+   Note that strings will normally be packed into 2*7 bits when
+   using cdata. This will not work for the EEPROM area. It is
+   possible to add '\0' in the strings ("a\0b\0c\0"), but it is
+   better to use a pragma to specify unpacked strings:
+
+    #pragma packedCdataStrings 0
+    // Store following strings unpacked
+    #pragma cdata[] = "Hello world!\0"
+
+    #pragma packedCdataStrings 1
+    // Store remaining strings packed
+
+   LINKER NOTE: EEPROM data must be put in an assembly module when
+   using MPLINK.
+
+
+4. Storing packed strings and other data in flash devices (16F87X)
+
+   The cdata definitions should be put in a separate file and
+   included in the beginning of the program. This enables
+   identifiers to be used in the program and checking to be
+   performed.
+
+
+    #define CDATA_START  0x80
+    #pragma cdata[CDATA_START]  // start of cdata block
+    #pragma cdata[] = 0x3FFF, 0x2000, 0x1000
+    #pragma cdata[] = 0x100, (10<<4) + 3456,\
+                      10, 456, 10000
+
+    #define D7(l,h)  l + h*128
+    #define D28(x)  x%0x4000, x/0x4000
+    #pragma cdata[] = D7(10,20), D28(10234543)
+
+    #pragma cdata.ID0 = 0x10, 200+3000
+    #pragma cdata.ID1 = "Hello world\0"
+    #pragma cdata.ID2 = "Another string\r\n" "merged"
+
+    #pragma cdata.ID_TABLE = ID0, ID1, ID2  // store addresses
+
+    #pragma cdata.CDATA_END    // end of cdata block
+
+    ..
+
+    #pragma origin CDATA_END  // program code follow here
+
+    void write(uns16 strID);                 -
+    ..
+    write(ID1);
+    write(ID2);
+
+
+All cdata start addresses have to be decided manually. The setup
+could be as follows:
+
+    .. cdata definitions
+    .. C functions at addresses lower than CDATA_START
+    // #pragma origin CDATA_START  // optional
+    #pragma origin CDATA_END
+    .. C functions at addresses higher than CDATA_END
+
+The #pragma origin CDATA_START is not required, because data
+overlapping is detected automatically. However, the compiler tells
+how many instructions are skipped for each origin statement. The
+cdata words are not counted at this printout.
+
+Statement #pragma origin CDATA_END allows functions to be stored
+right after the cdata area. This origin statement is not required if
+all cdata are located at the end of the code space.
+
+Preprocessor statements can be used for checking size during
+compilation:
+
+    #if CDATA_END - CDATA_START > 20
+     #error This is too much
+    #endif

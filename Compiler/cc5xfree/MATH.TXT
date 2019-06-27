@@ -1,0 +1,899 @@
+
+CONTENTS
+--------
+* Math Support
+* Floating Point
+* Floating point Exception Flags
+* IEEE754 interoperability
+* Fixed Point, Introduction
+* Constants
+* Fixed Point Interoperability
+* Integer Libraries
+* Fixed Point Libraries
+* Floating Point Library
+* Fast and Compact Inline Operations
+* Using Prototypes and Multiple Code Pages
+* Fixed Point Example
+* Floating Point Example
+* Code Size Comparison
+* How to save code space
+
+
+MATH SUPPORT
+------------
+
+  The math support includes integer, fixed and floating point math
+  including library functions:
+
+    Integer:        8, 16, 24 and 32 bit, with and without sign
+    Fixed point:    20 different formats, with and without sign
+    Floating point: 16, 24 and 32 bit
+
+  Math support for each compiler edition:
+             RED+FREE  STANDARD   EXTENDED
+    int      8+16      8+16+24    8+16+24+32
+    fixed    -         8+16+24    8+16+24+32
+    float    24        24+32      16+24+32
+
+  The compiler will automatically locate the required function for
+  an operation like 'a*b'.
+
+  The following command line options are available:
+    -we: no warning when fixed point constants are rounded
+    -wO: warning on operator library calls
+    -wI: warning on long inline code for multiplication and division
+
+  Fixed point requires manual worst case analysis to get correct
+  results. This must include calculation of accumulated error and
+  avoiding truncation and loss of significant bits. It is often
+  straight forward to get correct results when using floating point.
+  However, floating point functions requires significantly more
+  code.
+
+  In general, floating point and fixed point are both slow to
+  execute. Note that floating point is FASTER than fixed point on
+  multiplication and division, but slower on most other operations.
+
+  Operations not found in the libraries are handled by the built in
+  code generator. Also, the compiler will use inline code for
+  operations that are most efficient handled inline.
+
+  SAVE CODE AND SAVE RAM: All libraries are optimized to get compact
+  code. The floating point library is more compact than the
+  Microchip floating point libraries written in assembly. All
+  variables (except for the floating point flags) are allocated on
+  the generated stack to enable efficient RAM reuse with other local
+  variables. A new concept of transparent sharing of parameters in a
+  library is introduced to save code.
+
+  CC5X will automatically delete unused library functions. This
+  feature can also be used to delete unused user application
+  functions.
+
+    #pragma library 1
+     .. library functions that are deleted if unused
+    #pragma library 0
+     .. remaining user application
+
+  The normal use of '#pragma library' is around source library
+  files that are included in the user application.
+
+
+FLOATING POINT
+--------------
+
+  The compiler supports 16, 24 and 32 bit floating point. The
+  32 bit floating point can be converted to and from IEEE754 by
+  3 instructions (macro in math32f.h).
+
+    Format    Resolution    Range
+    16 bit    2.4 digits    +/- 3.4e38, +/- 1.1e-38
+    24 bit    4.8 digits    +/- 3.4e38, +/- 1.1e-38
+    32 bit    7.2 digits    +/- 3.4e38, +/- 1.1e-38
+
+  Note that 16 bit floating point is intended for special
+  use where accuracy is less important.
+
+  Supported floating point types:
+    float16         : 16 bit floating point
+    float, float24  : 24 bit floating point
+    double, float32 : 32 bit floating point
+
+  32 bit floating point format:
+    address ID
+    X       a.low8  : LSB, bit 0-7 of mantissa
+    X+1     a.midL8 : bit 8-15 of mantissa
+    X+2     a.midH8 : bit 16-22 of mantissa, bit 23: sign bit
+    X+3     a.high8 : MSB, bit 0-7 of exponent, with bias 0x7F
+
+    bit 23 of mantissa is a hidden bit, always equal to 1
+    zero (0.0) :  a.high8 = 0 (mantissa & sign ignored)
+
+    MSB     LSB
+    7F 00 00 00 : 1.0   =  1.0  * 2**(0x7F-0x7F) = 1.0 * 1
+    7F 80 00 00 : -1.0  = -1.0  * 2**(0x7F-0x7F) = -1.0 * 1
+    80 00 00 00 : 2.0   =  1.0  * 2**(0x80-0x7F) = 1.0 * 2
+    80 40 00 00 : 3.0   =  1.5  * 2**(0x80-0x7F) = 1.5 * 2
+    7E 60 00 00 : 0.875 =  1.75 * 2**(0x7E-0x7F) = 1.75 * 0.5
+    7F 60 00 00 : 1.75  =  1.75 * 2**(0x7E-0x7F) = 1.75 * 1
+    7F 7F FF FF : 1.9999998808
+
+    00 7C E3 5A : 0.0 (mantissa & sign ignored)
+    00 00 00 00 : 0.0
+
+    01 00 00 00 : 1.1754943508e-38 : smallest number above zero
+    FE 7F FF FF : 3.4028234664e+38 : largest number
+
+    FF 00 00 00 : +INF : positive infinity
+    FF 80 00 00 : -INF : negative infinity
+
+
+  24 bit floating point format:
+
+    address  ID
+    X        a.low8  : LSB, bit 0-7 of mantissa
+    X+1      a.mid8  : bit 8-14 of mantissa, bit 15: sign bit
+    X+2      a.high8 : MSB, bit 0-7 of exponent, with bias 0x7F
+
+    bit 15 of mantissa is a hidden bit, always equal to 1
+    zero (0.0) :  a.high8 = 0 (mantissa & sign ignored)
+
+    MSB  LSB
+    7F 00 00  : 1.0   =  1.0  * 2**(0x7F-0x7F) = 1.0 * 1
+    7F 80 00  : -1.0  = -1.0  * 2**(0x7F-0x7F) = -1.0 * 1
+    80 00 00  : 2.0   =  1.0  * 2**(0x80-0x7F) = 1.0 * 2
+    80 40 00  : 3.0   =  1.5  * 2**(0x80-0x7F) = 1.5 * 2
+    7E 60 00  : 0.875 =  1.75 * 2**(0x7E-0x7F) = 1.75 * 0.5
+    7F 60 00  : 1.75  =  1.75 * 2**(0x7E-0x7F) = 1.75 * 1
+    7F 7F FF  : 1.999969482
+
+    00 7C 5A  : 0.0 (mantissa & sign ignored)
+
+    01 00 00  : 1.17549435e-38 : smallest number above zero
+    FE 7F FF  : 3.40277175e+38 : largest number
+
+    FF 00 00  : +INF : positive infinity
+    FF 80 00  : -INF : negative infinity
+
+
+  16 bit floating point format:
+
+    address  ID
+     X       a.low8  : LSB, bit 0-6 of mantissa, bit 7: sign bit
+     X+1     a.high8 : MSB, bit 0-7 of exponent, with bias 0x7F
+
+     bit 7 of mantissa is a hidden bit, always equal to 1
+     zero (0.0) :  a.high8 = 0 (mantissa & sign ignored)
+
+    MSB LSB
+     7F 00 : 1.0   =  1.0  * 2**(0x7F-0x7F) = 1.0 * 1
+     7F 80 : -1.0  = -1.0  * 2**(0x7F-0x7F) = -1.0 * 1
+     80 00 : 2.0   =  1.0  * 2**(0x80-0x7F) = 1.0 * 2
+     80 40 : 3.0   =  1.5  * 2**(0x80-0x7F) = 1.5 * 2
+     7E 60 : 0.875 =  1.75 * 2**(0x7E-0x7F) = 1.75 * 0.5
+     7F 60 : 1.75  =  1.75 * 2**(0x7E-0x7F) = 1.75 * 1
+     7F 7F : 1.9921875
+
+     00 7C : 0.0 (mantissa & sign ignored)
+
+     01 00 : 1.175494-38 : smallest number above zero
+     FE 7F : 3.389531+38 : largest number
+
+     FF 00 : +INF : positive infinity
+     FF 80 : -INF : negative infinity
+
+
+
+FLOATING POINT EXCEPTION FLAGS
+------------------------------
+
+  The floating point flags are accessible in the application program.
+  At program startup the flags should be initialized:
+
+    FpFlags = 0;    // reset all flags, disable rounding
+    FpRounding = 1; // enable rounding
+
+  Also, after an exception is detected and handled in the
+  application, the exception bit should be cleared so that new
+  exceptions can be detected. Exceptions can be ignored if this is
+  most convenient. New operations are not affected by old
+  exceptions. This also enables delayed handling of exceptions. Only
+  the application program can clear exception flags.
+
+    char FpFlags;  // contains the floating point flags
+
+    bit FpOverflow    @ FpFlags.1; // floating point overflow
+    bit FpUnderFlow   @ FpFlags.2; // floating point underflow
+    bit FpDiv0        @ FpFlags.3; // floating point divide by zero
+
+    bit FpDomainError @ FpFlags.5; // domain error exception
+
+    bit FpRounding    @ FpFlags.6; // floating point rounding
+     // FpRounding=0: truncation
+     // FpRounding=1: unbiased rounding to nearest LSB
+
+
+
+IEEE754 INTEROPERABILITY
+------------------------
+
+  The floating point format used is not equivalent to the IEEE754
+  standard, but the difference is very small. The reason for using a
+  different format is code efficiency.
+
+  IEEE compatibility is needed when floating point values are
+  exchanged with the outside world. It may also happen that
+  inspecting variables during debugging requires the IEEE754 format
+  on some emulators/debuggers.
+
+  Macros for converting to and from IEEE754 are available:
+
+  math32f.h:
+     // before sending a floating point value out of the controller:
+     float32ToIEEE754(floatVar);  // change to IEEE754 (3 instr.)
+
+     // before using a floating point value received from outside:
+     IEEE754ToFloat32(floatVar);  // change from IEEE754 (3 instr.)
+
+  math24f.h:
+     float24ToIEEE754(floatVar);  // change to IEEE754 (3 instr.)
+     IEEE754ToFloat24(floatVar);  // change from IEEE754 (3 instr.)
+
+
+
+FIXED POINT, INTRODUCTION
+-------------------------
+
+  Fixed point can be used instead of floating point, mainly to save
+  program space. Fixed point math use formats where the decimal
+  point is permanently set at byte boundaries. For example, fixed8_8
+  use one byte for the integer part and one byte for the decimal
+  part. Fixed point operations maps nicely to integer operations
+  except for multiplication and division which are supported by
+  library functions.
+
+  Example:  fixed8_8 fx;
+
+    fx.low8  : Least significant byte, decimal part
+    fx.high8 : Most significant byte, integer part
+
+    MSB LSB   1/256 = 0.00390625
+     07 01 : 7 + 0x01*0.00390625 = 7.0039625
+     07 80 : 7 + 0x80*0.00390625 = 7.5
+     07 FF : 7 + 0xFF*0.00390625 = 7.99609375
+     00 00 : 0
+     FF 00 : -1 
+     FF FF : -1 + 0xFF*0.00390625 = -0.0039625
+     7F 00 : +127
+     7F FF : +127 + 0xFF*0.00390625 = 127.99609375
+     80 00 : -128
+
+
+  Convention:  fixed<S><I>_<D> :
+           <S> : 'U' : unsigned
+                 <none>:  signed
+           <I> : number of integer bits
+           <D> : number of decimal bits
+
+  Thus, fixed16_8 uses 16 bits for the integer part plus 8 bits
+  for the decimals, a total of 24 bits. The resolution for fixed16_8
+  is 1/256=0.0039 which is the lowest possible increment. This is
+  equivalent to 2 decimal digits (actually 2.4 decimal digits).
+
+  Built in fixed point types:
+
+    Type:        #bytes        Range                 Resolution
+
+    fixed8_8     2 (1+1)      -128, +127.996         0.00390625
+    fixed8_16    3 (1+2)      -128, +127.99998       0.000015259
+    fixed8_24    4 (1+3)      -128, +127.99999994    0.000000059605
+    fixed16_8    3 (2+1)    -32768, +32767.996       0.00390625
+    fixed16_16   4 (2+2)    -32768, +32767.99998     0.000015259
+    fixed24_8    4 (3+1)  -8388608, +8388607.996     0.00390625
+
+    fixedU8_8    2 (1+1)         0, +255.996         0.00390625
+    fixedU8_16   3 (1+2)         0, +255.99998       0.000015259
+    fixedU8_24   4 (1+3)         0, +255.99999994    0.000000059605
+    fixedU16_8   3 (2+1)         0, +65535.996       0.00390625
+    fixedU16_16  4 (2+2)         0, +65535.99998     0.000015259
+    fixedU24_8   4 (3+1)         0, +16777215.996    0.00390625
+
+    (additional types with decimals only; no integer part)
+    fixed_8      1 (0+1)      -0.5, +0.496           0.00390625
+    fixed_16     2 (0+2)      -0.5, +0.49998         0.000015259
+    fixed_24     3 (0+3)      -0.5, +0.49999994      0.000000059605
+    fixed_32     4 (0+4)      -0.5, +0.4999999998    0.0000000002328
+
+    fixedU_8    ÿ1 (0+1)         0, +0.996           0.00390625
+    fixedU_16    2 (0+2)         0, +0.99998         0.000015259
+    fixedU_24    3 (0+3)         0, +0.99999994      0.000000059605
+    fixedU_32    4 (0+4)         0, +0.9999999998    0.0000000002328
+
+  To sum up:
+
+  1. All types ending on _8 have 2 correct digits after decimal
+     point and a maximum error of 2 on the 3rd decimal digit.
+
+  2. All types ending on _16 have 4 correct digits after decimal
+     point and a maximum error of 1 on the 5th decimal digit.
+
+  3. All types ending on _24 have 7 correct digits after decimal
+     point and a maximum error of 3 on the 8th decimal digit.
+
+  4. All types ending on _32 have 9 correct digits after decimal
+     point and a maximum error of 2 on the 11th decimal digit.
+
+
+FIXED POINT CONSTANTS
+---------------------
+
+  The 32 bit floating point format is used during compilation and
+  calculation.
+
+    fixed8_8 a = 10.24;
+    fixed16_8 a = 8 * 1.23;
+    fixed8_16 x = 2.3e-3;
+    fixed8_16 x = 23.45e1;
+    fixed8_16 x = 23.45e-2;
+    fixed8_16 x = 0.;
+    fixed8_16 x = -1.23;
+
+  Constant rounding error example:
+    Constant: 0.036
+    Variable type: fixed16_8 (1 byte for decimals)
+    Error calculation: 0.036*256=9.216
+    The byte values assigned to the variable are simply: 0, 0, 9
+    The error is: (9/256-0.036)/0.036 = -0.023
+    The compiler prints this normalized error as a warning.
+
+
+
+TYPE CONVERSION
+---------------
+
+  The fixed point types are handled as subtypes of float. Type casts
+  are therefore infrequently required.
+
+
+
+FIXED POINT INTEROPERABILITY
+----------------------------
+
+  It is recommended to stick to one fixed point format in a program.
+  The main problem when using mixed types is the enormous number of
+  combinations which makes library support a challenge. However,
+  many mixed operations are allowed when CC5X can map the types to
+  the built in integer code generator:
+
+    fixed8_16 a, b;
+    fixed_16 c;
+    a = b + c;      // OK, code is generated directly
+    a = b * 10.22;  // OK: library function is supplied
+
+    a = b * c;      // a new user library function is required!
+    // A type cast can select an existing library function:
+    a = b * (fixed8_16)c;
+
+
+
+
+INTEGER LIBRARIES
+-----------------
+
+  The math integer libraries allows selection between different
+  optimizations, speed or size.
+
+  The libraries contains operations for multiplication, division
+  and division remainder.
+
+    math16.h  : basic library, up to 16 bit, signed and unsigned
+    math24.h  : basic library, up to 24 bit, signed and unsigned
+    math32.h  : basic library, up to 32 bit, signed and unsigned
+
+    math16m.h : speed & size, 8*8, 16*16
+    math24m.h : speed & size, 8*8, 16*16, and 24*8 multiply.
+    math32m.h : speed & size, 8*8, 16*16, and 32*8 multiply.
+                These libraries can be used when execution speed
+                is critical.
+                NOTE 1: they must be included first (before math??.h)
+                NOTE 2: math??.h contains similar functions (which
+                        are deleted)
+
+  The min and max timing cycles have been found by simulating many 
+  thousands calculations. However, the min and max limits are not 
+  quaranteed to be correct.
+
+    Sign: -: unsigned, S: signed
+
+   Sign Res=arg1 op arg2   Program   Approx. CYCLES
+
+   A:math32.h:
+    B:math24.h:
+     C:math16.h:            Code     min  aver   max
+   ABC  -   16 = 8 * 8       13       83    83    83
+   ABC  S   16 = 8 * 8       21       85    85    85
+   ABC  S/- 16 = 16 * 16     18      197   222   277
+   .B.  S   24 = 16 * 16     35      220   261   334
+   A..  S   32 = 16 * 16     42      223   253   313
+   A..  -   32 = 16 * 16     22      215   240   295
+   AB.  -   24 = 16 * 8      15      198   198   198
+   ..C  -   16 = 16 * 8      16      179   179   179
+   .B.  -   24 = 24 * 8      16      247   247   247
+   A..  -   32 = 32 * 8      17      356   356   356
+   .B.  -   24 = 24 * 16     26      217   263   361
+   A..  -   32 = 32 * 16     31      239   310   447
+   .B.  -   24 = 24 * 24     25      337   410   553
+   A..  S/- 32 = 32 * 32     31      513   654   929
+
+   ABC  -   16 = 16 / 8      18      235   235   235
+   AB.  -   24 = 24 / 8      19      368   368   368
+   A..  -   32 = 32 / 8      20      517   517   517
+   ABC  -   16 = 16 / 16     25      287   291   335
+   .B.  -   24 = 24 / 16     31      481   512   633
+   A..  -   32 = 32 / 16     32      665   718   873
+   .B.  -   24 = 24 / 24     36      564   576   732
+   A..  -   32 = 32 / 32     47      943   966  1295
+
+   ABC  S   16 = 16 / 8      33      196   201   211
+   AB.  S   24 = 24 / 8      37      305   310   326
+   A..  S   32 = 32 / 8      41      430   436   457
+   ABC  S   16 = 16 / 16     49      296   309   361
+   .B.  S   24 = 24 / 16     53      450   473   543
+   A..  S   32 = 32 / 16     57      626   660   747
+   .B.  S   24 = 24 / 24     66      573   597   762
+   A..  S   32 = 32 / 32     83      952   990  1329
+
+   ABC  -    8 = 16 % 8      18      226   226   226
+   .B.  -    8 = 24 % 8      19      354   354   354
+   A..  -    8 = 32 % 8      20      502   502   502
+   ABC  -   16 = 16 % 16     23      280   283   312
+   .B.  -   16 = 24 % 16     29      463   497   599
+   A..  -   16 = 32 % 16     30      636   698   828
+   .B.  -   24 = 24 % 24     34      556   567   700
+   A..  -   32 = 32 % 32     45      934   955  1254
+
+   ABC  S    8 = 16 % 8      30      189   190   195
+   .B.  S    8 = 24 % 8      35      291   292   300
+   A..  S    8 = 32 % 8      39      413   415   425
+   ABC  S   16 = 16 % 16     46      290   297   332
+   .B.  S   16 = 24 % 16     50      442   455   501
+   A..  S   16 = 32 % 16     54      614   634   692
+   .B.  S   24 = 24 % 24     66      567   584   725
+   A..  S   32 = 32 % 32     86      944   974  1284
+
+   A:math32m.h:
+    B:math24m.h:
+     C:math16m.h:           Code     min  aver   max
+   ABC  -   16 = 8 * 8       37       50    50    50
+   ABC  S/- 16 = 16 * 16     23+37    74   147   158
+   .B.  -   24 = 24 * 8      32+37   124   162   166
+   A..  -   32 = 32 * 8      43+37   178   212   222
+
+
+
+FIXED POINT LIBRARIES
+---------------------
+
+    math16x.h : 16 bit fixed point, 8_8, signed and unsigned
+    math24x.h : 24 bit fixed point 8_16, 16_8, signed and unsigned
+    math32x.h : 32 bit fixed point 8_24, 16_16, 24_8, signed and unsigned
+
+  The libraries can be used separately or combined.
+
+  The timing stated is measured in instruction cycles (4*clock) and
+  includes parameter transfer, call, return and assignment of the
+  return value. The timing values are found by executing a large number
+  of iterations using selected argument values.
+
+    Sign: -: unsigned, S: signed
+
+    Sign Res=arg1 op arg2   Program   Approx. CYCLES
+
+    math16x.h:               Code     min  aver   max
+     S   8_8 = 8_8 * 8_8      47      226   263   339
+     -   8_8 = 8_8 * 8_8      23      214   252   326
+     S   8_8 = 8_8 / 8_8      51      497   518   584
+     -   8_8 = 8_8 / 8_8      35      528   558   680
+
+    math24x.h:               Code     min  aver   max
+     S   16_8 = 16_8 * 16_8   60      376   450   577
+     -   16_8 = 16_8 * 16_8   27      364   437   580
+     S   16_8 = 16_8 / 16_8   68      850   893  1093
+     -   16_8 = 16_8 / 16_8   46      894   944  1222
+                                      
+     S   8_16 = 8_16 * 8_16   60      354   428   555
+     -   8_16 = 8_16 * 8_16   28      342   415   558
+     S   8_16 = 8_16 / 8_16   68     1050  1116  1349
+     -   8_16 = 8_16 / 8_16   46     1104  1188  1520
+
+    math32x.h:               Code     min  aver   max
+     S   24_8 = 24_8 * 24_8   77      558   722   983
+     -   24_8 = 24_8 * 24_8   35      546   709  1026
+     S   24_8 = 24_8 / 24_8   85     1298  1366  1761
+     -   24_8 = 24_8 / 24_8   57     1361  1432  1929
+
+     S   16_16= 16_16*16_16   78      561   704   930
+     -   16_16= 16_16*16_16   36      549   690   965
+     S   16_16= 16_16/16_16   85     1546  1650  2097
+     -   16_16= 16_16/16_16   57     1617  1733  2305
+
+     S   8_24 = 8_24 * 8_24   77      529   672   896
+     -   8_24 = 8_24 * 8_24   35      517   658   933
+     S   8_24 = 8_24 / 8_24   85     1794  1936  2433
+     -   8_24 = 8_24 / 8_24   57     1872  2033  2680
+
+
+
+FLOATING POINT LIBRARIES
+------------------------
+
+    math16f.h  : 16 bit floating point basic math
+
+    math24f.h  : 24 bit floating point basic math
+    math24lb.h : 24 bit floating point library
+
+    math32f.h  : 32 bit floating point basic math
+    math32lb.h : 32 bit floating point library
+
+  NOTE: The timing values includes parameter transfer, call and
+  return and also assignment of the return value.
+
+    Basic 32 bit math:              Approx. CYCLES
+                             Size   min  aver   max
+      a * b:  multiplication   91   380   468   553
+      a / b:  division        125   523   610   742
+      a + b:  addition        182    39   135   225
+      a - b:  subtraction   add+5    46   142   232
+      int32 -> float32         79    44    77   114
+      float32 -> int32         89    35    90   142
+
+    Basic 24 bit math:              Approx. CYCLES
+                             Size   min  aver   max
+      a * b:  multiplication   77   226   261   294
+      a / b:  division        102   323   359   427
+      a + b:  addition        152    33   114   173
+      a - b:  subtraction   add+5
+      int24 -> float24
+      float24 -> int24
+
+    Basic 16 bit math:              Approx. CYCLES
+                             Size   min  aver   max
+      a * b:  multiplication   62   104   107   114
+      a / b:  division         82   137   154   171
+      a + b:  addition        118    27    86   130
+      a - b:  subtraction   add+5
+      int16 -> float16
+      float16 -> int16
+
+  The following operations are handled by inline code:
+  assignment, comparing with constants, multiplication and division
+  by a multiple of 2 (i.e. a*0.5, b * 1024.0, c/4.0)
+
+  Floating point library functions:
+
+    float24 sqrt(float24);   // square root
+       Input range: positive number including zero
+       Accuracy: ME:1-2, relative error: < 3*10**-5 (*)
+       Timing: min aver max  1366  1561  1758  (**)
+       Size: 153 words + basic 24 bit math library
+       Minimum complete program example: 396 words
+
+    float32 sqrt(float32);   // square root
+       Input range: positive number including zero
+       Accuracy: ME:1-2, relative error: 1.2*10**-7 (*)
+       Timing: min aver max  3447  3932  4450  (**)
+       Size: 168 words + basic 32 bit math library
+       Minimum complete program example: 588 words
+
+
+    float24 log(float24);   // natural log function
+       Input range: positive number above zero
+       Accuracy: ME:1, relative error: < 1.5*10**-5 (*)
+       Timing: min aver max  2179  3075  3299  (**)
+       Size: 214 words + basic 24 bit math library
+       Minimum complete program example: 623 words
+
+    float32 log(float32);   // natural log function
+       Input range: positive number above zero
+       Accuracy: ME:1, relative error: < 6*10**-8 (*)
+       Timing: min aver max  3493  4766  5145  (**)
+       Size: 265 words + basic 32 bit math library
+       Minimum complete program example: 762 words
+
+
+    float24 log10(float24);   // log10 function
+       Input range: positive number above zero
+       Accuracy: ME:1-2, relative error: < 3*10**-5 (*)
+       Timing: min aver max  2435  3333  3569  (**)
+       Size: 15 words + size of log()
+       Minimum complete program example: 638 words
+
+    float32 log10(float32);   // log10 function
+       Input range: positive number above zero
+       Accuracy: ME:1-2, relative error: < 1.2*10**-7 (*)
+       Timing: min aver max  3935  5229  5586  (**)
+       Size: 17 words + size of log()
+       Minimum complete program example: 779 words
+
+
+    float24 exp(float24);   // exponential (e**x) function
+       Input range: -87.3365447506, +88.7228391117
+       Accuracy: ME:1, relative error: < 1.5*10**-5 (*)
+       Timing: min aver max  1969  3026  3264  (**)
+       Size: 251 words + 102(floor24) + basic 24 bit math
+       Minimum complete program example: 673 words
+
+    float32 exp(float32);   // exponential (e**x) function
+       Input range: -87.3365447506, +88.7228391117
+       Accuracy: ME:1, relative error: < 6*10**-8 (*)
+       Timing: min aver max  4465  4741  5134  (**)
+       Size: 322 words + 145(floor32) + basic 32 bit math
+       Minimum complete program example: 847 words
+
+
+    float24 exp10(float24);   // 10**x function
+       Input range: -37.9297794537, +38.531839445
+       Accuracy: ME:1, relative error: < 1.5*10**-5 (*)
+       Timing: min aver max  1987  3005  3194  (**)
+       Size: 256 words + 102(floor24) + basic 24 bit math
+       Minimum complete program example: 678 words
+
+    float32 exp10(float32);   // 10**x function
+       Input range: -37.9297794537, +38.531839445
+       Accuracy: ME:1, relative error: < 6*10**-8 (*)
+       Timing: min aver max  3605  4716  5045  (**)
+       Size: 326 words + 145(floor32) + basic 32 bit math
+       Minimum complete program example: 851 words
+
+
+    float24 sin(float24);   // sine function, input in radians
+    float24 cos(float24);   // cosine function, input in radians
+       Input range: -512.0, +512.0
+       Accuracy: error: < 3*10**-5 (*)
+           The relative error can be larger when the output is near
+           0 (for example near sin(2*PI)), but the absolute error is
+           lower than the stated value.
+       Timing: min aver max   396  2492  2746  (**)
+       Size: 215 words + basic 24 bit math library
+       Minimum complete program example: 595 words
+
+    float32 sin(float32);   // sine function, input in radians
+    float32 cos(float32);   // cosine function, input in radians
+       Input range: -512.0, +512.0
+           * can be used over a much wider range if lower accuracy
+             is accepted (degrades gradually to 1 significant
+             decimal digit at input value 10**6)
+       Accuracy: error: < 1.2*10**-7 (*)
+           The relative error can be larger when the output is near
+           0 (for example near sin(2*PI)), but the absolute error is
+           lower than the stated value.
+       Timing: min aver max   543  5220  5855  (**)
+       Size: 357 words + basic 32 bit math library
+       Minimum complete program example: 818 words
+
+
+    (*) The accuracy of the math functions have been checked using
+        many thousands of calculations. ME=1 means that the mantissa
+        value can be wrong by +/- 1 (i.e. 1 bit). The relative error
+        is then 1.5*10**-5 for 24 bit floating point, and 6*10**-8
+        for 32 bit floating point. Only a small fraction of the
+        calculations may have the stated error.
+
+    (**) The min and max timing stated have been found by simulating
+         many thousands calculations. However, the min and max
+         limits are not quaranteed to be correct. When using a 4 MHz
+         oscillator, one instruction cycle is 1 microsecond.
+
+
+
+FAST AND COMPACT INLINE OPERATIONS
+----------------------------------
+
+  The compiler will use inline code for efficiency at some
+  important operations:
+
+  Integer:
+    - converting to left and right shifts:  a*8, a/2
+    - selecting high/low bytes/words: a/256, a%256, b%0x10000
+    - replacing remainder by AND operation: a%64, a%0x80
+
+  Fixed Point:
+    - converting to left and right shifts:  a*8, a/2
+    - all operations except multiplication and division are
+      implemented inline
+
+  Floating point:
+    - add/sub (incr/decr) of exponent: a*128.0, a/2
+    - operations == and != :  a==b, a!=0.0
+    - comparing with constants:  a>0, a<=10.0
+    - inverting the sign bit:  a=-a, b=-a
+
+
+USING PROTOTYPES AND MULTIPLE CODE PAGES
+----------------------------------------
+
+  Note 1: Using floating point on the 12 bit core where each
+  codepage is 512 words will be challenging.
+
+  Note 2: It is normally not required to define prototypes, even
+  when using many code pages. If you want to place the library
+  functions to a certain codepage, this is easiest done by:
+
+    #pragma codepage 1
+     #include "math24f.h"
+    #pragma codepage 0
+
+  Prototypes can be used when functions are called before they are
+  defined. Note that operator functions need a function name to be
+  defined as prototypes.
+
+  Also note that the compiler use a linear search from the beginning
+  of the operator table until a match for the current operation is
+  found. The operator definition/prototype sequence may therefore
+  influence the operator selected.
+
+  It is not recommended to modify the libraries by adding 'pragma
+  codepage' between the functions. Instead, prototypes and 'pragma
+  location' or the page type modifier makes function placement
+  easier to set up and tune. For example, placing the division
+  function on codepage 1 and the other on the default codepage can
+  be done by:
+
+    ..
+    #include "my_math.h"
+    ..
+    #include "math24f.h"
+    ..
+
+    //--------- beginning-of-file my_math.h --------------
+    float24 operator* _fmul24(sharedM float24 arg1, sharedM float24 arg2);
+    page1 float24 operator/_fdiv24(sharedM float24 arg1,sharedM float24 arg2);
+    float24 operator+ _fadd24(sharedM float24 arg1, sharedM float24 arg2);
+    float24 operator- _fsub24(sharedM float24 arg1, sharedM float24 arg2);
+    float24 operator= _int24Tofloat24(sharedM int24 arg1);
+    float24 operator= _float24ToInt32(sharedM int32 arg1);
+    int24 operator= _float24ToInt24(sharedM float24 arg1);
+    bit operator< _f24_LT_f24(sharedM float24 arg1, sharedM float24 arg2);
+    bit operator>= _f24_GE_f24(sharedM float24 arg1, sharedM float24 arg2);
+    bit operator> _f24_GT_f24(sharedM float24 arg1, sharedM float24 arg2);
+    bit operator<= _f24_LE_f24(sharedM float24 arg1, sharedM float24 arg2);
+    //--------- end-of-file my_math.h --------------
+
+
+
+FIXED POINT EXAMPLE
+-------------------
+
+    #pragma chip PIC16C73
+    #include "math24x.h"
+    uns16 data;
+    fixed16_8 tx, av, mg, a, vx, prev, kp;
+
+    void main(void)
+    {
+        vx = 3.127;
+        tx += data;         // automatic type cast
+        data = kp;          // assign integer part
+        if (tx < 0)
+            tx = -tx;       // make positive
+        av = tx/20.0;
+        mg = av * 1.25;
+        a = mg * 0.98;      // 0.980469: error on constant: 0.000478
+        prev = vx;
+        vx = a/5.0 + prev;
+
+        kp = vx * 0.036;       // 0.03515626: error on constant: 0.024
+        kp = vx / (1.0/0.036); // 27.7773437 error on constant: 0.0000156
+    }
+
+    // CODE: 274 instructions including library of 130 instructions
+
+
+
+FLOATING POINT EXAMPLE
+----------------------
+
+    // CODE: 635 instructions including library of 470 instructions
+
+    // The statements are identical to the above fixed point example
+    // to enable code size comparison
+
+    #pragma chip PIC16C73
+    #include "math24f.h"
+    uns16 data;
+    float tx, av, mg, a, vx, prev, kp;
+
+    void main(void)
+    {
+        InitFpFlags();   // enable rounding as default
+        vx = 3.127;
+        tx += data;         // automatic type cast
+        data = kp;          // assign integer part
+        if (tx < 0)
+            tx = -tx;       // make positive
+        av = tx/20.0;
+        mg = av * 1.25;
+        a = mg * 0.98;
+        prev = vx;
+        vx = a/5.0 + prev;
+
+        kp = vx * 0.036;
+        kp = vx / (1.0/0.036);
+    }
+
+
+
+CODE SIZE COMPARISON
+--------------------
+
+  First example is the 32 bit floating point cosine function
+  'cos()'. This is also found in the Microchip AN660 library. By
+  removing all uncalled functions from the AN660 assembly include
+  files, it was possible to reduce the size of a complete example
+  program to 1170 words. The equivalent CC5X example program is down
+  to 820 words, a saving of 350 code words (-30%).
+
+  32 bit floating point math size comparison:
+
+     Operation          CC5X library     Microchip AN669
+     a32 * b32               91             111 (+22%)
+     a32 / b32              125             166 (+33%)
+     a32 + b32              182             270 (+48%)
+     int32 -> float32        78             114 (+46%)
+     float32 -> int32        90             125 (+39%)
+
+
+
+HOW TO SAVE CODE
+----------------
+
+  Choices that influence code size:
+
+    1. What libraries to include (24/32 bit float or fixed point)
+
+    2. Rounding can be disabled permanently.
+         #define DISABLE_ROUNDING
+         #include "math32f.h"
+
+    3. Optimization, currently available on division only.
+       Note that speed is default. Also note that the saving
+       is only 5 - 7 instructions. Timing difference is up
+       to 15-20 percent.
+        #define FP_OPTIM_SIZE   // optimize for SIZE
+        #define FP_OPTIM_SPEED  // optimize for SPEED: default
+
+
+  The recommended strategy is to select a main library for the
+  demanding math operations. Different floating and fixed point
+  operations should only be mixed if there is a good reason for it.
+
+  Mixing different data types is possible to save code and RAM
+  space. For example using a small type in an array and a larger
+  type for the math operations.
+
+  So, first decide what math library to include. For floating point
+  the main decision is between the 24 bit or the 32 bit library.
+  If you use 32 bit operations, this can be combined with 24 (and 16)
+  bit floating point types to save RAM.
+
+  Automatic type conversion:
+     integer <-> float/double
+     integer <-> fixed point
+     float <-> double
+     fixed point <-> float/double  : requires additional functions
+
+  In general, using the smallest possible data type will save code
+  and RAM space. This must be balanced against the extra work to
+  analyze the program to prevent overflow and too large accumulated
+  errors. If there is plenty of code space in the controller, and
+  timing is no problem, then large types can be used. Otherwise
+  analysis is required to get optimal selections.
+
+  It is recommended to keep the number of called library functions
+  as low as possible. Although function selection is done
+  automatically by the compiler, it is possible to use type casts or
+  even make a custom library by copying the required functions from
+  existing libraries. All libraries are written in C. CC5X can print
+  a warning for each operator function that is called (option -wO).
+
+

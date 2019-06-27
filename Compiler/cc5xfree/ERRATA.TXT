@@ -1,0 +1,47 @@
+
+SILICON ERRATA ISSUES
+
+
+PLEASE READ THIS:
+   Some devices contains silicon bugs. The compiler will not
+   automatically generate work around code for such problems. This
+   file contains a list of some silicon bugs and suggested
+   solutions. It is ALWAYS recommended to get (download) the latest
+   errata doc from Microchip to make sure that all such issues are
+   handled in the application.
+
+
+1. FLASH READ bug. Applies to the PIC16F873A /874A /876A /877A
+   devices. This problem is specific to Rev. B0, and has been
+   resolved by Rev. B2 of the silicon (date codes later than
+   0242xxx).
+
+   PROBLEM: "To ensure proper reading of data from tables in FLASH
+   Program Memory, as described in Section 3.5 of the Device Data
+   Sheet, the following work around is necessary."
+
+   WORK AROUND: This must be handled in the application according to
+   the information from Microchip. The compiler will use RETLW to
+   read const data by using:
+
+     #pragma wideConstData 8192  // disable FLASH READ (RETLW only)
+
+   From Microchip doc: "One NOP should precede, and six NOPs should
+   follow the instruction that sets the read bit. Replace the
+   required 3- instruction sequence, shown in Example 3-3 of the
+   Data Sheet, with the sequence shown in Example 1 ( below). The
+   interrupts should be disabled during this process."
+
+       BCF INTCON, GIE ;Disable the interrupts
+       NOP ;This NOP is required for the workaround.
+       BSF EECON1, RD ;This initiates program memory read.
+       NOP ;Any instructions here are ignored
+       NOP ;second instruction cycle after BSF EECON1, RD.
+       NOP ;These four NOP's are required for the workaround.
+       NOP
+       NOP
+       NOP
+       BSF INTCON, GIE ;Enable the interrupts
+
+
+

@@ -1,0 +1,973 @@
+
+CONTENTS
+--------
+* Linker Support
+* Using MPLINK or a Single Module
+* Variables and Pointers
+* Local Variables
+* Header Files
+* Using Ram Banks
+* Bank Bit Updating
+* Functions
+* Using Code Pages
+* Interrupts
+* Call Level Checking
+* Computed Goto
+* Recommendations when using MPLINK
+* MPLAB Support
+* MPASM
+* The MPLINK Script File
+* EXAMPLE with 3 MODULES
+
+
+
+LINKER SUPPORT
+--------------
+
+CC5X supports the relocatable assembly format defined by Microchip.
+This means that MPLINK can be used to link code modules generated
+by CC5X, including MPASM assembly modules.
+
+There are many details to be aware of. It is therefore recommended to
+read this file carefully. The important issues are related to:
+
+    - external functions and variables
+    - ram bank updating
+    - page bit updating
+    - call level checking
+    - MPLINK script files
+    - MPLAB integration
+
+The command line option '-r' (or '-r2') makes CC5X generate
+relocatable assembly. This file is then assembled by MPASM and
+linked together with other C and assembly modules by MPLINK. This
+can automated by using 'make' to build the whole application in
+several stages.
+
+NOTE that if you need the application program to be as compact as
+possible, then it is recommended to use only ONE C module. Source
+code modularity is obtained by using many C files and include these
+in the main C module by using #include.
+
+Command line options:
+
+    -r : generate relocatable assembly (no hex file)
+    -r2[=][<file.lkr>]: use separate logical section for interrupt routine
+    -rx : make variables static by default
+
+    // external assembler options
+    -x<file> : assembler executable: -xC:\progra~1\mplab\mpasmwin.exe
+    -X<option>: assembler option: -X/q (all options must be separate)
+
+    // assembly file options (normally not used)
+    -rp<N> : name on codepage 0 is PROG<N>, default PROG1
+    -rb<N> : name on RAM bank 0 is BANK<N>, default BANK0
+    -ro<N> : add offset <N> when generating local variable block name
+
+
+
+USING MPLINK OR A SINGLE MODULE
+-------------------------------
+
+Currently it is best to use a single C module for several reasons.
+MPLINK support was mainly offered to enable asm modules to be added.
+
+Limitations when using MPLINK:
+  1. Asm mode debugging only (C source code appear as comments)
+  2. Multiple C modules does not allow the static local variable
+     stack to be calculated for the whole program, meaning that much
+     more RAM space will be used for local variables.
+  3. Call level checking must be done manually
+  4. Computed goto will be slower because the compiler can not check
+     256 byte address boundary crossing.
+  5. Inefficient RAM bank updating, meaning mode code.
+
+  The main reasons for using multiple modules is probably:
+  1. Faster build: However, CC5X is increadible fast. MPASM doing
+     much simpler tasks is 3 times slower.
+  2. Module separation: However, sufficient module separation can be
+     achieved by using multiple C files.
+  3. Asm modules: Inline ASM is supported by CC5X.
+
+C modules can be merged into a single module and still be viewed as
+single modules. Such C modules can be used in several projects
+without modification. The procedure is as follows:
+
+1. Include the "separate modules" into the main module:
+
+    #include "module1.c"
+    #include "module2.c"
+    // ..
+    #include "moduleN.c"
+    // ..
+    void main( void) { .. }
+
+2. Each merged "module" includes the required header files. This can
+   be header files specific for the "module" or common header files:
+
+    #include "header1.h"
+    #include "header2.h"
+    // ..
+    #include "headerN.h"
+    // ..
+    // module functions
+
+3. If the same header file is included in more than one "module", it
+   will be required to prevent compiling the same header file
+   definitions more than once. This is done by using the following
+   header file framing:
+
+    #ifndef  _HEADER_N_Symbol   // the first header file line
+    #define _HEADER_N_Symbol    // compile this line once only
+    // ..
+    // header definitions as required
+    // ..
+    #endif  // the last header file line
+
+
+
+VARIABLES AND POINTERS
+----------------------
+
+Variables defined in other module can be accessed. CC5X needs to
+know the type, and this is done by adding 'extern' in front of a
+variable definition.
+
+    extern char a;
+
+All global variables that are not 'static' are made available for
+other modules automatically. CC5X inserts 'GLOBAL' statements in the
+generated assembly file.
+
+CC5X will generate a 'MOVLW LOW (var_name+<offset>)' when using the
+address operators '&var_name'.
+
+Global bit variables is a challenge. It is recommended to first
+define a char variable and then use 'bit bx @ ch.0;'. Otherwise CC5X
+will defines a global char variable with random name. This name have
+the format '_Gbit<X><X>' where <X> is (more or less) random
+selected letters. This variable is reserved by a RES statement and
+used in the assembly file when generating relocatable assembly.
+
+    bit b1;
+    b1 = 0;   // BCF _GbitQB+0,0
+
+The variable file (*.var) is slightly modified when generating
+relocatable assembly. Note that most addresses stated in the
+variable file are reallocated by MPLINK.
+
+Option -rx will make variables static by default. This means that
+variables will not be visible outside the module unless 'extern' is
+added in front of the type definition. Note that option -rx requires
+that an extern pointer definition need to be stated before the
+allocation of the pointer.
+
+  extern char *px;  // definition only, no allocation of space
+  char *px;         // space is allocated for the pointer
+
+IMPORTANT: 'const' data can not be 'extern' because MPLINK does not
+support the const access functions generated by CC5X. Identifiers
+with the 'const' modifier will not be made visible outside the
+module. This also applies to struct objects with const pointers.
+
+IMPORTANT: Allocation of pointers is slightly different when using
+relocatable assembly. The main reason for this is that CC5X can not
+trace how addresses are assigned to pointers between different
+modules. There is no change on local and static pointers. An extern
+visible pointer without a size modifier (size1/size2) will be:
+
+  a) 16 bit if RAM alone use more than 8 bit addresses regardless of
+     the default memory model used.
+  b) 16 bit if special registers need more than 8 bit addresses when
+     the default RAM memory model is 16 bit (option -mm2 or -mr2).
+  c) 8 bit otherwise.
+
+An extern visible pointer with the size1 modifier will access
+addresses from 0 - 255. An error is printed if the pointer is
+assigned higher addresses. However, it is possible to force an
+extern 8 bit pointer to access addresses 256 - 511 by a pragma
+statement:
+
+  extern size1 char *px;
+  #pragma assume *px in rambank 2   // rambank 2 or 3
+
+Note that 8 bit pointers in a struct can only access addresses
+from 0 - 255, even if the struct is static or local.
+
+
+
+LOCAL VARIABLES
+---------------
+
+CC5X uses a different naming strategy on local variables when generating
+relocatable assembly. CC5X reserves a continuous block in each ram bank
+(or shared bank) and use this name when accessing local variables.
+
+IMPORTANT RESTRICTION:
+The main() routine, interrupt service routines and all extern
+functions are defined as independent call trees or paths. A function
+called from two independent call paths can not contain local
+variables or parameters because address sharing can not be computed
+in advance. CC5X detects this and generates an error message.
+
+The name of the local RAM blocks are _LcRA, _LcRB, etc. The last
+letter is related to the RAM bank and the second last to the module
+name. Adding option -ro1 will for example change name _LcAA to
+_LcBA. This can be used if there is a collision between local
+variable block defined in separate C modules. MPLINK detects such
+collisions.
+
+    -ro<N> : add offset <N> when generating local variable block name
+
+Local variables for external available functions are allocated
+separately. One block for each extern function. This often means
+inefficiently use of RAM. It is therefore recommended to use
+'extern' only on those functions that have to be extern, and use few
+local variables in the extern functions. Also consider using global
+variables.
+
+
+
+HEADER FILES
+------------
+
+It is recommended to make common header files that contains global
+definitions that are included in all C modules. Such files can
+contain definitions (#define), IO variable names, etc.
+
+
+
+USING RAM BANKS
+---------------
+
+RAM bank definitions only applies to devices with RAM located
+in more than one bank.
+
+Note that the RAM bank of ALL variables have to be known (defined)
+during compilation. Otherwise the bank bit updating will not be
+correct. The bank is defined by using '#pragma rambank' between the
+variable definition statements, also for 'extern' variables. An
+alternative is to use the bank type modifier (bank0..bank3, shrBank).
+
+   #pragma rambank 0
+    char a,b;
+
+   #pragma rambank 1
+    extern char array1[10];
+
+   #pragma rambank -
+    extern char ex;   // shared/common RAM
+
+
+
+BANK BIT UPDATING
+-----------------
+
+CC5X use an advanced algorithm to update the bank selection
+bits. However, it is not possible to trace calls to external
+functions. Therefore, calling an external function or allowing
+incoming calls makes CC5X assume that the bank bits are undefined.
+This often means that more code compared to the optimal bank bit
+update strategy.
+
+It is therefore recommended to only use 'extern' on those functions
+that have to be extern, and keep the number of calls between modules
+to a minimum.
+
+
+
+FUNCTIONS
+---------
+
+Functions residing in other modules can be called. Functions defined
+can be called from other modules (also from assembly modules).
+
+NOTE that ALL functions that are called from another module needs
+an 'extern' first. This is an extra requirement that is optional in
+C. The reason is that the compiler needs to decide the strategy on
+bank bit updating and local variables allocation. It is most
+efficient to use FEW extern functions.
+
+    extern void func1(void);  // defined in another module
+
+    extern void func2(void) { .. }  // can be called from another module
+
+NOTE that extern functions can only have a single 8 bit parameter which
+is transferred in W (not const/pointer/bit). This is because local
+storage information is not shared between modules. The return value
+can not be larger than 8 bit for the same reason (bit values are
+returned in Carry).
+
+    Supported extern function parameter types:  char, uns8, int8
+    Supported extern function return types:  char, uns8, bit
+
+CC5X inserts a 'GLOBAL <function>' in the generated assembly
+code for all external available functions. 'EXTERN <function>'
+is inserted for functions defined in other modules.
+
+If the C module contains main(), then a 'goto main' is inserted in
+the STARTUP section.
+
+
+
+USING CODE PAGES
+----------------
+
+Page bit updating only applies to functions with more than
+one code page.
+
+The code page of all function calls have to be known (defined)
+during compilation. Otherwise the page bit updating will not be
+correct. The page is defined by using '#pragma location' or the page
+type modifier for functions defined in another module. For functions
+defined in the current module, '#pragma codepage' can also be used.
+
+It is recommended to define the function heading (prototypes) for all
+extern functions in a header file including page information. This
+file should be included in all C modules.
+
+IMPORTANT: When a module contains functions located on more than one
+codepage, all function belonging to the same page must be put in
+sequence in the source file. This because MPASM/MPLINK requires all
+object code sections to be continuous and CC5X is unable to change
+the definition order of the functions.
+
+
+
+INTERRUPTS
+----------
+
+CC5X requires that the interrupt function is located at address 4.
+Writing the interrupt service routine in C using MPLINK will require
+some care. The main issue is to set up the linker script file as
+described later in this file. Two options are possible:
+
+ALTERNATIVE 1: Use the linking sequence to locate the interrupt
+service routine. This is done by listing the module with the
+interrupt service routine FIRST in the module list used by MPLINK.
+This is the important point which makes MPLINK put the interrupt
+service routine in the beginning of the PROG/PROG1 logical code
+section (address 4). When using MPLAB, the C module containing the
+interrupt function must be listed first in the project file list.
+The list file generated by MPLINK should be inspected to ensure that
+the interrupt routine starts at address 4. Another important point
+is to remove the #pragma origin 4 when using MPLINK. This is the
+only difference in the C source compared to using the built in CC5X
+linker (single C module).
+
+ALTERNATIVE 2: Set up a SEPARATE logical section in the linker
+script file for the interrupt service routine. This is a more robust
+solution. CC5X will generate a partial script file to avoid manual
+address calculation. The partial script file must be included in
+the main script file. The setup is described in section 'THE MPLINK
+SCRIPT FILE' in this file.
+
+It is also possible to design an assembly module containing the
+interrupt service routine. Information on how to do this should be
+found in the MPASM/MPLINK documentation.
+
+
+
+CALL LEVEL CHECKING
+-------------------
+
+CC5X will normally check that the call level is not exceeded. This
+is only partially possible when using MPLINK. CC5X can ONLY check
+the current module, NOT the whole linked application.
+
+When calling an external function from the C code, CC5X will assume
+that the external call is one level deep. This checking is sometimes
+enough, especially if all C code is put in one module, and the
+assembly code modules are called from well known stack levels.
+Calling C function from assembly will require manual analysis of
+the call level.
+
+Therefore, careful verification of the call structure is required to
+avoid program crash when overwriting a return value on the hardware
+stack (which is 2 or 8 levels deep). The compiler generated *.fcs
+files can provide information for this checking.
+
+Calls to external functions is written in the *.fcs file. External
+function calls are marked [EXTERN].
+
+
+
+COMPUTED GOTO
+-------------
+
+14 bit core: CC5X will always use the long format when generating
+code for skip(). It is not possible to use the -GS option. The long
+format is 3 instructions longer than the short format.
+
+12 bits core: All destination addresses must be located in the first
+256 word half of the codepage. Unfortunately CC5X can not check the
+layout done by MPLINK. It is therefore strongly recommended to apply
+some manual design rules that will prevent destination addresses to
+be moved into the invisible (high) code page half. This can be done
+by ensuring a linking sequence that will put all modules containing
+computed goto at the beginning (offset 0) of the codepage. Inspection
+of the generated list file is recommended.
+
+
+
+RECOMMENDATIONS WHEN USING MPLINK
+---------------------------------
+
+1. Use as few C modules as possible because of:
+    a) inefficient bank bit updating between modules
+    b) local variable space can not be reused between modules
+    c) only single 8 bit parameter in calls between modules
+    d) only 8 or 1 bit return values between modules
+
+2. Use definition header files that are shared between modules.
+   Include the shared definition in all C modules to enable
+   consistency checking.
+
+    a) function headings (prototypes). Add page information when
+       using more than one code page:
+        // module1.c
+        extern page0 void sub(char ax);
+        // module2.c
+        extern page1 void mpy(void);
+        // Do not add extern to functions that are not called
+        // from other modules.
+        char localFunctionA(void);  // local function
+        // Note that it is required to use extern in the function
+        // definition when an extern prototype is not defined.
+
+    b) variables: add bank information
+        // module1.c
+        extern shrBank char b;
+        #define ARRAY_SIZE 10
+        extern bank0 char array[ARRAY_SIZE];
+        // module3.asm
+        extern bank1 char mulcnd, mulplr, H_byte, L_byte;
+
+    c) constants, definitions, enumerations and type information
+        #define MyGlobalDef  1
+        enum { S1 = 10, S2, S3, S4 S5 };
+        // names assigned to port pins
+        #pragma bit in  @ PORTB.0
+        #pragma bit out @ PORTB.1
+
+3. Define bit variables to overlap with a char variable
+    /* extern */ char myBits;
+    bit b1 @ myBits.0;
+    bit b2 @ myBits.1;
+    // use 'extern char myBits;' for global bits and put the
+    // definitions in a shared header file. Move definition
+    // 'char myBits;' to one of the modules.
+
+4. When a module contains functions located on more than one
+   codepage, all function belonging to the same page must be put in
+   sequence in the source file. This because MPLAB requires all
+   object code sections to be continuous and CC5X is unable to
+   change the definition order of the functions.
+
+5. Make a linker script file according to the description stated
+   later. Follow the guidelines when using interrupts.
+
+6. Set up a 'makefile' to enable automatic (re)compilation and
+   linking. Follow the guidelines when using MPLAB. Edit and use
+   the option '+reloc.inc' when compiling C modules.
+
+7. Do the final call level checking manually
+
+8. Update conventions in assembly functions called from C modules:
+    a) The bank selection bits should be updated in the beginning of
+       assembly functions that are called from C.
+    b) The page selection bits must be correct (set to the current
+       module page) when returning.
+
+
+
+MPLAB SUPPORT
+-------------
+
+The following description is an example to show the basic steps
+involved when configuring MPLAB to build and work on a multi-
+module project using CC5X, MPASM and MPLINK.
+
+1. Create the main project files. 
+
+   First create a new folder for the project (or select an existing
+   folder). Then use copy-and-paste in your favorite editor to
+   create 5 files with contents found at the end of this file. When
+   this is finished, you should have 5 new files in the folder:
+   module1.c, module2.c, globdef1.h, module3.asm, 16f877.lkr.
+
+   New files can be added to the project later.
+
+2. Start MPLAB
+
+3. The general installation of CC5X under MPLAB is described in
+   file 'INSTALL.TXT'.
+
+
+******* IMPORTANT ******
+
+
+     MPLAB version 5 : follow the remaining steps
+
+     MPLAB version 6.0 - 6.22 : upgrade to version 6.30 or later is
+     strongly recommended. Otherwise use the temporary solution
+     described on http://www.bknd.com/mplab6.shtml
+
+     MPLAB version 6.30 and later : follow description in INSTALL.TXT
+
+
+
+***** REMAINING STEPS IS FOR MPLAB 5 ONLY *****
+
+   Ensure that the proper path and executable is selected
+   for CC5X, MPASM and MPLINK. This is done by selecting the menu
+   item Project->Install Language Tool. Change Language Suite to
+   CC5X. Select each tool one by one (C-Compiler, MPASM, MPLINK).
+   The executable should look like:
+
+     c:\progra~1\cc5x\cc5x.exe
+     c:\progra~1\mplab\mpasm.exe
+     c:\progra~1\mplab\mplink.exe
+
+   Each tool should have a mark in the Command-line box.
+
+   NOTE: It is recommended to click the OK button after defining
+   each executable. Defining several 'Tool Names' at the same time
+   may cause MPLAB to say "Build Tool not installed properly". This
+   weakness applies to MPLAB version 5.70.00 and probably other
+   versions also.
+
+4. Select Project->New Project
+
+   In the New Project window, select the right Drive and Directory
+   for the project (double-click on the folders to open or close
+   them). Then write the project File Name, for example test1.pjt.
+   Click OK.
+
+5. Click on Change Development Mode. Then select the right
+   Processor (PIC16F877), make other configuration changes, and click
+   OK. MPLAB may pop up some notes. Just click OK.
+
+   NOTE: if you want to debug the code using the built in simulator,
+   make sure that MPLAB SIM Simulator is selected.
+
+6. Change the Language Tool Suite to CC5X. Click OK on the warning
+   generated.
+
+7. Select the file name (test1[.hex]) in Project Files. Click on Node
+   Properties. Change the Language Tool (upper right) to MPLINK.
+
+   Add the name of the linker file (16f877.lkr) in the Additional
+   Command Line Options window. Click OK.
+
+   NOTE that the standard MPLAB linker script files (for example
+   16f877.lkr) should be adapted according to the description found
+   in this file.
+
+8. Click on Add Node. Select the modules (*.c, *.asm) to be added to
+   the project one by one (click OK for each selected). Repeat for
+   all modules in the project (c and asm).
+
+   Change the node properties for each node (file) by first
+   selecting the node and then click Node Properties. Add the
+   option /q for asm files (quiet operation). Click Ok.
+
+   Note that the file 'reloc.inc' need to be found in the current
+   project directory. You can either copy the supplied reloc.inc
+   found in the CC5X directory, or use nested include of this
+   file (with full path name): +c:\progra~1\cc5x\reloc.inc
+
+   The folder path to the assembler in file 'reloc.inc' may have to
+   be changed depending on the installation of MPLAB/MPASM.
+
+   Note that options to the C modules can be put in an options file
+   (reloc.inc or another file). See also the supplied op.inc in the
+   CC5X package for more details. The option file is included in the
+   same way as reloc.inc (remember to use space to separate the
+   options).
+
+   CC5X need to locate the header file defining the processor used.
+   This file can be copied to the current directory, or better, the
+   include path can be supplied as a command line option to CC5X,
+   for example: -Ic:\progra~1\cc5x
+
+   Default options for MPASM: /e+ /l+ /x- /c+ /pXXXXX /o+
+
+   Click OK to close the Edit Project window.
+
+9. Make Project (F10) should now compile and link the project.
+
+   Note that MPASM will generate its own warnings and messages.
+   These should normally be ignored. MPASM do not know about the
+   automatic bank bit updating and will display messages about
+   this. MPASM have generated the message if the .asm file
+   extension is used in the message.
+
+10. Debugging. If you are using the MPLAB simulator, you can start
+    execution for example by using the step command (F7). MPLAB
+    will now display the assembly file.
+
+    Program execution tracing will always use the assembly file as
+    source when using the -r (-r2) option and MPASM/MPLINK. This
+    should work fine, because CC5X prints the C statements as
+    comments in the generated assembly file.
+
+    IMPORTANT: MPLAB will NOT reload the generated assembly file
+    when recompiling a C file. This means that the asm file used for
+    tracing must be CLOSED manually when recompiling. Otherwise the
+    source line displayed when tracing will be wrong.
+
+
+
+
+MPASM
+-----
+
+MPASM can generate object code from assembly modules. There are
+some restrictions and additions when using relocatable modules
+compared to using a single assembly module.
+
+CC5X does not support the object code directly, but generates
+relocatable assembly that MPASM use to generate the object file.
+MPASM is started from within the CC5X so that no extra command
+is required (only the right command line options).
+
+Case Sensitivity option in MPASM is by default On, and should remain
+On because C use case dependent identifiers.
+
+Options to start MPASM and generate relocatable object code:
+
+    -xC:\progra~1\mplab\mpasmwin.exe -X/o -X/q
+
+Options when assembling and linking a single file:
+
+    -xC:\progra~1\mplab\mpasmwin.exe -X/q
+
+If the CC5X error file option (-F) is missing, CC5X will read the
+error file generated by MPASM and write the error and warnings found
+there to the screen and the output file (*.occ). The error file is
+then deleted.
+
+If the CC5X error file option (-F) is present, CC5X will write error
+and warnings to the error file (*.err) and append the error and
+warnings generated by MPASM at the end of this file.
+
+Note that MPLAB will automatically show the contents of the error
+file if it is non-empty. Otherwise the screen output is displayed
+in 'Build Results' window.
+
+
+
+
+THE MPLINK SCRIPT FILE
+----------------------
+
+MICROCHIP supplies sample linker script files for each device with
+the file extension '.lkr' (look in the MPLAB directory). When making
+a linker script file for a specific project, this file can be copied
+and edited to suit the needs of CC5X.
+
+The sample MPLINK script files must be changed slightly if the
+interrupt function is written in C. The reason is that the interrupt
+function must start at address 4 when using CC5X. It could be
+possible to use a vector at address 4, but this slows down interrupt
+response. Anyway, using a goto vector directly is not possible when
+the device contains more than 2048 words of code. This is because
+PCLATH needs to be saved before it can be updated.
+
+CHANGE 1: Interrupt routine in C WITH a separate logical section.
+CC5X generates a partial script file when using the -r2 command line
+option (or -r2[=]<file.lkr>). This file is written if (and only if)
+CC5X compiles a module with an interrupt service routine. The
+generated script file may look like:
+
+  CODEPAGE  NAME=intserv  START=0x4  END=0x1C
+  CODEPAGE  NAME=page0    START=0x1D END=0x7FF
+
+The required change in the main script file is then:
+
+    //CODEPAGE   NAME=page0    START=0x4      END=0x7FF
+    INCLUDE  module1.lkr   // change to right module/script file name
+
+    SECTION  NAME=ISERVER  ROM=intserv   // Interrupt routine
+
+
+CHANGE 2: Interrupt routine in C WITHOUT a separate logical section.
+Example change:
+
+    CODEPAGE   NAME=vectors  START=0x0  END=0x3   PROTECTED
+    // NEW VALUE:                           ^------
+
+    CODEPAGE   NAME=page0    START=0x4  END=0x7FF
+    // NEW VALUE:                  ^------
+
+
+CHANGE 3: If INTERRUPTS are not used, then the first code page can
+start at address 1. Example change:
+
+    CODEPAGE NAME=vectors  START=0x0 END=0x0 PROTECTED
+    // NEW VALUE:                          ^------
+
+    CODEPAGE   NAME=page0    START=0x1  END=0x7FF
+    // NEW VALUE:                    ^------
+
+
+CHANGE 4: The 12 bit core devices need a logic section for the
+startup vector. Example change for the 16C57:
+
+    CODEPAGE   NAME=page3    START=0x600    END=0x7FE
+    // NEW VALUE:                               ^------
+
+    CODEPAGE   NAME=vectors  START=0x7FF    END=0x7FF   // NEW
+    SECTION    NAME=STARTUP  ROM=vectors                // NEW
+
+
+CHANGE 5: Certain devices requires a special interrupt save
+sequence that needs to use certain RAM locations (0x20 and 0xA0).
+These addresses must be disabled for allocation in the linker script
+file. This applies to 14000, 16C63, 16C63A, 16C65, 16C65A, 16C65B,
+16C73, 16C73A, 16C73B, 16C74, 16C74A, 16C74B, 16F873, 16F874 and
+similar devices. CC5X generates a warning when variables are
+assigned to fixed addresses. Example change:
+
+    DATABANK   NAME=gpr0     START=0x21     END=0x7F
+    // NEW VALUE:                  ^------
+
+    DATABANK   NAME=gpr1     START=0xA1     END=0xFF
+    // NEW VALUE:                  ^------
+
+
+CHANGE 6: LOGICAL RAM sections must be added, one for each DATABANK
+that contain RAM locations (not special function registers). Note
+that if a logical RAM section is missing, then the variables that
+belongs to this section will be put in the "default" section. MPLINK
+gives no error on missing logical sections in the script file and
+the program will fail.
+
+    SECTION    NAME=BANK0    RAM=gpr0  // RAM bank 0
+    SECTION    NAME=BANK1    RAM=gpr1  // RAM bank 1
+    SECTION    NAME=BANK2    RAM=gpr2  // RAM bank 2
+    SECTION    NAME=BANK3    RAM=gpr3  // RAM bank 3
+    SECTION    NAME=SHRAM    RAM=gprnobnk // shared locations
+
+    SECTION    NAME=GPRAM    RAM=gprs  // device without RAM banks
+
+
+*****
+
+- logical code blocks:
+    STARTUP   startvector
+    ISERVER   optional logical section for the interrupt routine
+    PROG      for devices with one codepage only
+    PROG1     first codepage
+    PROG2
+    PROG3
+    PROG4
+    CONFIG    config word
+    IDLOCS    id-locations
+
+- logical RAM blocks:
+    GPRAM     devices without RAM banks
+    BANK0     bank 0
+    BANK1     bank 1
+    BANK2     bank 2
+    BANK3     bank 3
+    SHRAM     shared/common RAM (if available on device)
+
+- command line options:
+    - page naming
+         -rp0   : PROG0 is the name of the frist codepage
+         -rp1   : PROG1 is the name of the frist codepage (default)
+    - bank naming
+         -rb0   : BANK0 is the name of the frist RAM bank (default)
+         -rb1   : BANK1 is the name of the frist RAM bank
+    - separate interrupt logical section (named ISERVER)
+         -r2               : use name of current module (<module>.lkr)
+         -r2[=]<file.lkr>  : use defined file name
+
+
+
+EXAMPLE WITH 3 MODULES
+----------------------
+This example demonstrates the syntax only.
+
+// ********************************************************
+// MODULE1.C
+
+#include "globdef1.h"
+#include "int16CXX.H"
+
+#pragma origin 4
+
+interrupt int_server(void)
+{
+    int_save_registers    // W, STATUS (and PCLATH)
+
+    if (T0IF)  {
+        /* TMR0 overflow interrupt */
+        TMR0 = -45;
+        T0IF = 0;  /* reset flag */
+    }
+
+    if (INTF)  {
+        /* INT interrupt */
+        INTF = 0;  /* reset flag */
+    }
+
+    int_restore_registers // W, STATUS (and PCLATH)
+}
+
+char a;
+bit b1, b2;
+
+void main(void)
+{ 
+    PORTB = 0b0010;
+    TRISB = 0b0001;
+
+    if (TO == 1 && PD == 1 /* power up */)  {
+        clearRAM();  // set all RAM to 0
+        a = 5;
+        b1 = 1;
+    }
+    mulcnd = 10;
+    mulplr = 20;
+    mpy();  // assembly routine (demo)
+
+    b2 = !b1;
+    do  {
+        if (in == 1)
+             break;
+        sub(a&3);
+    } while (a < 200);
+}
+
+
+// ********************************************************
+// MODULE2.C
+
+#include "globdef1.h"
+
+void sub(bank1 char ax)
+{
+    bank1 char i;      /* a local variable */
+
+    /* generate pulses */
+    for (i = 0; i <= ax+1; i++)  {
+        out = 1;
+        nop2();
+        out = 0;
+        a ++;  // increment global variable
+    }
+}
+
+
+; ********************************************************
+// GLOBDEF1.H
+
+// names assigned to port pins
+#pragma bit in  @ PORTB.0
+#pragma bit out @ PORTB.1
+
+// module1.c
+extern bank0 char a;
+
+// module3.asm
+extern bank1 char mulcnd, mulplr, H_byte, L_byte;
+
+// module2.c
+extern page0 void sub(char ax);
+
+// module3.asm
+extern page0 void mpy(void);
+
+
+
+; ********************************************************
+; MODULE3.ASM
+        #INCLUDE "P16F877.INC"
+
+BANK1   UDATA
+mulcnd  RES 1 ; 8 bit multiplicand
+mulplr  RES 1 ; 8 bit multiplier
+H_byte  RES 1 ; High byte of the 16 bit result
+L_byte  RES 1 ; Low byte of the 16 bit result
+count   RES 1 ; loop counter
+
+        GLOBAL mulcnd, mulplr, H_byte, L_byte
+
+PROG1   CODE    ; page0
+mpy
+        GLOBAL  mpy
+        bsf STATUS, RP0  ; access bank 1
+        clrf H_byte
+        movlw 8
+        movwf count
+        movf mulcnd, W
+loop    rrf mulplr, F
+        btfsc STATUS, C
+        addwf H_byte, F
+        rrf H_byte, F
+        rrf L_byte, F
+        decfsz  count, F
+        goto  loop
+        retlw 0
+
+        END
+
+
+
+// ********************************************************
+// File: 16f877.lkr
+
+LIBPATH  .
+
+CODEPAGE   NAME=vectors  START=0x0      END=0x3      PROTECTED
+//CODEPAGE   NAME=page0    START=0x4      END=0x7FF
+INCLUDE  module1.lkr
+CODEPAGE   NAME=page1    START=0x800    END=0xFFF
+CODEPAGE   NAME=page2    START=0x1000   END=0x17FF
+CODEPAGE   NAME=page3    START=0x1800   END=0x1FFF
+CODEPAGE   NAME=.idlocs  START=0x2000   END=0x2003   PROTECTED
+CODEPAGE   NAME=.config  START=0x2007   END=0x2007   PROTECTED
+CODEPAGE   NAME=eedata   START=0x2100   END=0x21FF   PROTECTED
+
+DATABANK   NAME=sfr0     START=0x0      END=0x1F     PROTECTED
+DATABANK   NAME=sfr1     START=0x80     END=0x9F     PROTECTED
+DATABANK   NAME=sfr2     START=0x100    END=0x10F    PROTECTED
+DATABANK   NAME=sfr3     START=0x180    END=0x18F    PROTECTED
+
+DATABANK   NAME=gpr0     START=0x20     END=0x6F
+DATABANK   NAME=gpr1     START=0xA0     END=0xEF
+DATABANK   NAME=gpr2     START=0x110    END=0x16F
+DATABANK   NAME=gpr3     START=0x190    END=0x1EF
+
+SHAREBANK  NAME=gprnobnk START=0x70     END=0x7F
+SHAREBANK  NAME=gprnobnk START=0xF0     END=0xFF
+SHAREBANK  NAME=gprnobnk START=0x170    END=0x17F
+SHAREBANK  NAME=gprnobnk START=0x1F0    END=0x1FF
+
+SECTION    NAME=STARTUP  ROM=vectors    // Reset vector
+SECTION    NAME=ISERVER  ROM=intserv    // Interrupt routine
+SECTION    NAME=PROG1    ROM=page0      // ROM code space - page0
+SECTION    NAME=PROG2    ROM=page1      // ROM code space - page1
+SECTION    NAME=PROG3    ROM=page2      // ROM code space - page2
+SECTION    NAME=PROG4    ROM=page3      // ROM code space - page3
+SECTION    NAME=IDLOCS   ROM=.idlocs    // ID locations
+SECTION    NAME=CONFIG   ROM=.config    // Configuration bits location
+SECTION    NAME=DEEPROM  ROM=eedata     // Data EEPROM
+
+SECTION    NAME=SHRAM    RAM=gprnobnk   // unbanked locations
+SECTION    NAME=BANK0    RAM=gpr0       // RAM bank 0
+SECTION    NAME=BANK1    RAM=gpr1       // RAM bank 1
+SECTION    NAME=BANK2    RAM=gpr2       // RAM bank 2
+SECTION    NAME=BANK3    RAM=gpr3       // RAM bank 3
+
+
+
+// ********************************************************
+// File: module1.lkr : generated by CC5X when using the -r2 option
+//  Note that -r2 must be used instead of -r (file 'reloc.inc')
+
+CODEPAGE  NAME=intserv  START=0x4  END=0x1C
+CODEPAGE  NAME=page0    START=0x1D END=0x7FF

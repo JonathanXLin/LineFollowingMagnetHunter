@@ -1,0 +1,229 @@
+
+APPLICATION NOTES
+
+COMPUTED GOTO
+-------------
+
+Computed goto is a compact and elegant way of implementing a
+multiselection. It is also the best way of storing a table of
+constants. However, the 'const' type modifier is normally the best
+way to store constant data in program memory.
+
+WARNING: Designing computed goto's of types not described in this
+section may fail. The generated assembly file will then have
+to be studied carefully because optimization and updating of the
+bank selection bits can be wrong.
+
+The 12 bit core requires that all destinations of the computed goto
+is within the first half code page. The 14 bit core requires that
+PCLATH is correctly updated before loading PCL.
+
+The compiler can do ALL updating and checking automatically. Study
+the following code samples.
+
+NOTE: the function have to be moved to another start address if a
+code address error message is printed when using the -GS option.
+
+
+char sub0(char i)
+{
+    skip(i);   // jumps 'i' instructions forward
+    #pragma return[] = "Hello world"
+    #pragma return[] = 10 "more text" 0 1 2 3 0xFF
+
+ /* This is a safe and position-independent method of coding return
+    arrays or lookup constant tables. It works for all PICmicro
+    members. The compiler handles all checking and code generation
+    issues. */
+
+ /* It is possible to use return arrays like above or separate
+    return statements as follows (any C statements can be
+    inserted). */
+
+    return 110;
+    return 0x2F;
+}
+
+
+char sub01(char W)
+{
+    skip(W);   // using W saves one instruction
+    #pragma return[] = "Simple, isn't it" 0
+
+ /* skip(W) works for the 12 bit core and for the first 256
+    addresses of the 14 bit core. . The compiler will produce an
+    error message if the function is not located in a legal
+    region */
+}
+
+
+Computed Goto Regions:
+
+The compiler enters a goto region when skip() is detected. In this
+region optimization is slightly changed, and address checks are made
+to ensure that the cpu does not jump to an unexpected address. The
+goto region normally ends where the function ends.
+
+A goto region can also be started by:
+  #pragma computedGoto 1   // start c-goto region
+  // useful if PCL is written directly
+
+A goto region can also be stopped by:
+  #pragma computedGoto 0   // end of c-goto region
+   /* recommended if the function contains code
+      below the goto region, for instance when the
+      table consists of an array of goto
+      statements (examples follow later). */
+
+
+Computed Goto Regions affects:
+    1. Optimization
+    2. Register bank bit updating (RP0/1, FSR5/6)
+    3. 256 word page checks
+
+
+char sub01(char W)
+{
+  /* The computed goto region can be constructed just as in assembly
+     language. However, '#pragma computedGoto' should be inserted
+     around such a region. Otherwise unexpected results may
+     occur. */
+
+   #pragma computedGoto 1
+   #ifndef _16C5X
+    PCLATH = 0;
+   #endif
+    PCL += W;
+
+   /* 14 bit core: REMEMBER to make sure that the function is
+      located within the first 256 addresses. (There is no warning
+      on this when 'skip(W)' is NOT used) */
+
+    return 'H';
+    return 'e';
+    return 'l';
+    return 'l';
+    return 'o';
+   #pragma computedGoto 0
+}
+
+
+/* A VERY BIG TABLE (with more than 256 elements), can also be
+constructed: */
+
+#ifndef _16C5X   // only for the 14 bit core
+char L_dst, H_dst;
+
+char sub02(void)
+{
+   /* H_dst,L_dst : index to the desired element,
+                    starting from 0 */
+   #define CGSTART 0x100
+    PCLATH = CGSTART/256 + H_dst;   // MSB offset
+    PCL = L_dst;  // GLOBAL JUMP AT THIS POINT
+    return W;    // dummy return, never executed
+
+   /* IMPORTANT: THIS FUNCTION AND THE DESTINATION
+      ADDRESSES HAVE TO BE LOCATED IN THE SAME 2048
+      WORD CODEPAGE. OTHERWISE PCLATH WILL NOT BE
+      CORRECT ON RETURN */
+}
+
+#pragma  origin  CGSTART // the starting point
+  /* The origin statement is the best way to set the starting point
+     of the large return table. The address should be defined by a
+     '#define' statement, because it then can be safely changed
+     without multiple updating. */
+
+char sub02r(void)
+{
+   #pragma computedGoto 2   // start of large table
+    #pragma return[] = "ALFA"
+    #pragma return[] = 0x10 0x11
+    ..
+}
+#pragma origin 0x0320
+   /* using an origin statement after a large return
+      table is useful to check the number of return
+      instructions generated. In this case, there
+      should be 0x320-0x100=0x250=544 instructions.
+      If not, any differences will be reported by
+      the compiler, either as an error, or as a
+      message. */
+#endif
+
+
+void sub3(char s)
+{
+    /* the next statements could also be written as
+       a switch statement, but this solution is
+       fastest and most compact. */
+
+    if (s >= 3)
+        goto Default;
+    skip(s);
+
+    goto Case0;
+    goto Case1;
+    goto LastCase;
+
+  #pragma computedGoto 0  // end of c-goto region
+
+  Case0:
+    /* user statements */
+    return;
+
+  Case1:
+  LastCase:
+    /* user statements */
+    return;
+
+  Default:
+    /* user statements */
+    return;
+}
+
+
+
+void sub4(char s)
+{
+ /* this solution can be used if very fast
+    execution is important and a fixed number of
+    instructions (2/4/8/..) is executed at each
+    selection. Please note that extra statements
+    have to be inserted to fill up empty space
+    between each case. */
+
+    if (s >= 10)
+        goto END;
+    Carry = 0;
+    s = rl(s);  /* multiply by 2 */
+    s = rl(s);  /* multiply by 2 */
+    skip(s);
+
+    // execute 4 instructions at each selection
+  Case0:  nop(); nop(); nop(); return;
+  Case1:  nop(); nop(); nop(); return;
+  Case2:  nop(); nop(); nop(); return;
+  Case3:  nop(); nop(); nop(); return;
+  Case4:  nop(); nop(); nop(); return;
+  Case5:  nop(); nop(); nop(); goto END;
+  Case6:  nop(); nop(); nop(); goto END;
+  Case7:  nop(); nop(); nop(); goto END;
+  Case8:  nop(); nop(); nop(); goto END;
+  Case9:  nop(); nop(); nop(); goto END;
+  #pragma computedGoto 0  /* end of region */
+  END:
+
+  /*
+    NOTE: "goto END" is necessary for ALL cases if
+    the function is called from another codepage.
+
+    NOTE: '#pragma optimize ..' can be
+    useful in this situation.
+
+    If the call level is too deep, note that the
+    compiler can only replace CALL by GOTO if there are
+    few 'return constant' inside the function.
+  */
+}

@@ -1,0 +1,87 @@
+
+DEVICE CONFIGURATION
+--------------------
+
+PICmicro configuration information can be put in the generated hex
+and assembly file. ID locations can also be programmed. The
+configuration information is generated IF AND ONLY IF the #pragma
+config statement is included.
+
+Note that some PICmicro programmers may reject this information,
+especially setting of the ID locations.
+
+Syntax:
+
+    #pragma config [<id>] = <state> [, <id> = <state>]
+
+    <id>    : PWRTE, WDTE, FOSC, BODEN, ID, reg2
+    <state> : on, off, LP,HS,XT,RC, <expression>
+
+    #pragma config WDTE=off, FOSC=HS
+    #pragma config WDTE=0, FOSC=2, PWRTE=1
+
+    #pragma config |= 0x100  // set bit 8
+    #pragma config &= 0xFFFC // clear bit 0 and 1
+    #pragma config &= ~3     // clear bit 0 and 1
+    #pragma config |= 3      // set bit 0 and 1
+
+More than one #pragma config statements is possible, where each
+statement modify one or more bits in the config register. The
+default setting of the bits is 0. The above statements will thus
+modify any previous settings. It is also possible to assign a single
+value to the config register, overwriting any previous setting:
+
+    #pragma config = (0x3 | 0x10) & 0x1FF
+
+Note that it is not possible to add more config identifiers than
+shown. But, using #define together with the operators '|' and '&'
+is possible:
+
+    #define CP_off |= 0x3F30
+    #pragma config CP_off, FOSC = LP
+
+
+The second config register (0x2008) is accessed using:
+
+    #pragma config reg2 = 0x3 | 0x4
+
+The address of the second config register is normally defined in the
+header file using:
+
+    #pragma config_reg2 0x2008
+
+
+Programming of ID-locations:
+
+    #pragma config ID=0x1234   //  all 4 locations, 4 bit in each
+
+    #pragma config ID[0] = 0xF  //  location 0
+    #pragma config ID[1] = 0x0  //  location 1
+    #pragma config ID[2] = 1, ID[3] = 0x3
+
+The config and ID information is added at the end of the generated
+assembly and hex file.
+
+
+Configuration word address:
+    12 bit core: 0xFFF
+    14 bit core: 0x2007 (and optional 0x2008)
+
+ID words address:
+    16C54/55:    0x200-0x203
+    16C56:       0x400-0x403
+    16C57/58:    0x800-0x803
+    14 bit core: 0x2000-0x2003
+
+
+Some devices (16F505/12F508/12F509) use a different physical address
+of the configuration word compared to the default logical address
+established. The chip programming software should map the
+configuration word in these cases. If there is problems with this
+mapping, the following pragma statement can be used to change the
+configuration word address in the source code:
+
+ #pragma config_reg 0x3FF  // or 0x7FF
+
+This statement must be used with some care, because there may be
+problems when changing programming equipment.
