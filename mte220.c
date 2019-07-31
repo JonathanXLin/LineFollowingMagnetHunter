@@ -142,10 +142,10 @@ void Timer1_ISR(void);
 */
 
 // F06 settings (to be customized by each group)
-#define SERVO_1MS	(uns16)2500  // 2500 ticks for 1 ms
-#define SERVO_LEFT_STOP	(uns16)3750  // 3750 ticks for 1.5 ms
-#define SERVO_RIGHT_STOP (uns16)3750  // 3750 ticks for 1.5 ms
-#define SERVO_2MS	(uns16)5000  // 5000 ticks for 2 ms
+#define SERVO_1MS	(uns16)3255  // 2500 ticks for 1 ms
+#define SERVO_LEFT_STOP	(uns16)3520  // 3750 ticks for 1.5 ms
+#define SERVO_RIGHT_STOP (uns16)3525  // 3750 ticks for 1.5 ms
+#define SERVO_2MS	(uns16)37810  // 5000 ticks for 2 ms
 
 
 //;**********************************************************************
